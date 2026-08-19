@@ -8,8 +8,8 @@ PROG=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODULES="$SCRIPT_DIR/modules"
 MACHINE=$(uname -n)
-
 AWK=$(command -v gawk)
+AUDIT_OUTPUT_DIR="/tmp/access-audit"
 
 if [ -z "$AWK" ]; then
     echo "ERROR: gawk not found."
@@ -36,7 +36,7 @@ run_audit()
     local SOURCE="$4"
     local AUDIT_FILE="$5"
     local CONFIGURATION="$6"
-    local JSON_FILE="/tmp/prueba.json"
+    local JSON_FILE="$7"
 
     "$AWK" \
         -v AUDIT_TITLE="$TITLE" \
@@ -70,6 +70,8 @@ run_log_audit()
     local DATE
     local CONFIGURATION
     local AUDIT_FILE
+    local LOGDIR
+    local JSON_FILE
 
     # Path para mostrar: aseguramos que empieza por /
     AUDIT_FILE="$LOGFILE"
@@ -87,7 +89,7 @@ run_log_audit()
         TITLE="UNKNOWN"
     fi
 
-    TITLE="${TITLE^^}"
+    TITLE="${TITLE}"
 
     # Fecha del access.log
     DATE=$(basename "$LOGFILE" |
@@ -104,7 +106,13 @@ run_log_audit()
         CONFIGURATION="UNKNOWN"
     fi
 
-    CONFIGURATION="${CONFIGURATION^^}"
+    CONFIGURATION="${CONFIGURATION}"
+
+    LOGDIR="$AUDIT_OUTPUT_DIR/$CONFIGURATION/$TITLE"
+
+    mkdir -p "$LOGDIR"
+
+    JSON_FILE="$LOGDIR/access-audit-$DATE.json"
 
     run_audit \
         "$LOGFILE" \
@@ -112,9 +120,9 @@ run_log_audit()
         "$DATE" \
         "log" \
         "$AUDIT_FILE" \
-        "$CONFIGURATION"
+        "$CONFIGURATION" \
+        "$JSON_FILE"
 }
-
 
 ###############################################################################
 # LOG COMPRIMIDO (.gz)
@@ -248,7 +256,6 @@ run_directory_audit()
     echo " Directory audit"
     echo "======================================================================="
     echo "Root: $ROOT"
-    echo ""
 
     # Buscar únicamente access.log dentro de la estructura de Apache.
     #
@@ -260,24 +267,16 @@ run_directory_audit()
     # en los nombres de fichero.
     while IFS= read -r -d '' LOGFILE
     do
-        COUNT=$((COUNT + 1))
-
-        echo ""
-        echo "#######################################################################"
-        echo "# LOG $COUNT"
-        echo "# $LOGFILE"
-        echo "#######################################################################"
-        echo ""
-
+	((COUNT++))
         run_log_audit "$LOGFILE"
 
     done < <(
-        find "$ROOT" \
-            -type f \
-            -name 'access*.log' \
-            -print0 |
-        sort -z
-    )
+	    find "$ROOT" \
+	    -type f \
+	    -regextype posix-extended \
+	    -regex '.*/access-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}:[0-9]{2}\.log' \
+	    -print0 
+	)
 
     if [ "$COUNT" -eq 0 ]
     then
