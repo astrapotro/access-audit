@@ -9,7 +9,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODULES="$SCRIPT_DIR/modules"
 MACHINE=$(uname -n)
 
-
 AWK=$(command -v gawk)
 
 if [ -z "$AWK" ]; then
@@ -19,11 +18,15 @@ fi
 
 VERSION=$(cat "$SCRIPT_DIR/VERSION")
 
-
 echo ""
 echo "======================================================================="
 echo "                     Apache access audit $VERSION"
 echo "======================================================================="
+
+
+###############################################################################
+# RUN AUDIT
+###############################################################################
 
 run_audit()
 {
@@ -40,8 +43,8 @@ run_audit()
         -v AUDIT_DATE="$DATE" \
         -v AUDIT_SOURCE="$SOURCE" \
         -v AUDIT_FILE="$AUDIT_FILE" \
-	-v AUDIT_CONFIGURATION="$CONFIGURATION" \
-	-v JSON_FILE="$JSON_FILE" \
+        -v AUDIT_CONFIGURATION="$CONFIGURATION" \
+        -v JSON_FILE="$JSON_FILE" \
         -f "$MODULES/globals.awk" \
         -f "$MODULES/utils.awk" \
         -f "$MODULES/parser.awk" \
@@ -57,8 +60,9 @@ run_audit()
 
 
 ###############################################################################
-# LOG normal
+# LOG NORMAL
 ###############################################################################
+
 run_log_audit()
 {
     local LOGFILE="$1"
@@ -108,12 +112,12 @@ run_log_audit()
         "$DATE" \
         "log" \
         "$AUDIT_FILE" \
-        "$CONFIGURATION" \
-	"$JSON_FILE"
+        "$CONFIGURATION"
 }
 
+
 ###############################################################################
-# LOG comprimido (.gz)
+# LOG COMPRIMIDO (.gz)
 ###############################################################################
 
 run_gz_audit()
@@ -122,12 +126,33 @@ run_gz_audit()
     local TITLE
     local DATE
     local TMPFILE
+    local CONFIGURATION
+    local AUDIT_FILE
 
     TITLE=$(basename "$(dirname "$GZFILE")")
     TITLE="${TITLE^^}"
 
     DATE=$(basename "$GZFILE" |
            sed -E 's/^access-([0-9]{4}-[0-9]{2}-[0-9]{2}).*\.log\.gz$/\1/')
+
+    CONFIGURATION=$(echo "$GZFILE" |
+                    grep -oE '/conf_[^/]+' |
+                    head -1 |
+                    sed 's|^/||')
+
+    if [ -z "$CONFIGURATION" ]
+    then
+        CONFIGURATION="UNKNOWN"
+    fi
+
+    CONFIGURATION="${CONFIGURATION^^}"
+
+    AUDIT_FILE="$GZFILE"
+
+    if [[ "$AUDIT_FILE" != /* ]]
+    then
+        AUDIT_FILE="/$AUDIT_FILE"
+    fi
 
     TMPFILE=$(mktemp /tmp/access-audit.XXXXXX.log)
 
@@ -137,7 +162,13 @@ run_gz_audit()
         return 1
     }
 
-    run_audit "$TMPFILE" "$TITLE" "$DATE" "gz" "$GZFILE"
+    run_audit \
+        "$TMPFILE" \
+        "$TITLE" \
+        "$DATE" \
+        "gz" \
+        "$AUDIT_FILE" \
+        "$CONFIGURATION"
 
     rm -f "$TMPFILE"
 }
@@ -146,6 +177,7 @@ run_gz_audit()
 ###############################################################################
 # TAR.GZ
 ###############################################################################
+
 run_tar_audit()
 {
     local TARFILE="$1"
@@ -190,9 +222,7 @@ run_tar_audit()
             "$DATE" \
             "tar.gz" \
             "$AUDIT_FILE" \
-            "$CONFIGURATION" \
-	    "$JSON_FILE"
-
+            "$CONFIGURATION"
 
         rm -f "$TMPFILE"
 
@@ -202,22 +232,105 @@ run_tar_audit()
     )
 }
 
+
+###############################################################################
+# DIRECTORY AUDIT
+###############################################################################
+
+run_directory_audit()
+{
+    local ROOT="$1"
+    local LOGFILE
+    local COUNT=0
+
+    echo ""
+    echo "======================================================================="
+    echo " Directory audit"
+    echo "======================================================================="
+    echo "Root: $ROOT"
+    echo ""
+
+    # Buscar únicamente access.log dentro de la estructura de Apache.
+    #
+    # Ejemplo:
+    #
+    # /log/apache2/conf_X/virtualhost_Y/access.log
+    #
+    # Se utiliza -print0 para soportar espacios y caracteres especiales
+    # en los nombres de fichero.
+    while IFS= read -r -d '' LOGFILE
+    do
+        COUNT=$((COUNT + 1))
+
+        echo ""
+        echo "#######################################################################"
+        echo "# LOG $COUNT"
+        echo "# $LOGFILE"
+        echo "#######################################################################"
+        echo ""
+
+        run_log_audit "$LOGFILE"
+
+    done < <(
+        find "$ROOT" \
+            -type f \
+            -name 'access*.log' \
+            -print0 |
+        sort -z
+    )
+
+    if [ "$COUNT" -eq 0 ]
+    then
+        echo "WARNING: no se han encontrado access.log bajo:"
+        echo "         $ROOT"
+        echo ""
+        return 1
+    fi
+
+    echo ""
+    echo "======================================================================="
+    echo " Directory audit finished"
+    echo " Logs analysed: $COUNT"
+    echo "======================================================================="
+    echo ""
+
+    return 0
+}
+
+
 ###############################################################################
 # MAIN
 ###############################################################################
 
 if [ "$#" -ne 1 ]; then
-    echo "Uso: $0 <access.log|access.log.gz|access.tar.gz>"
+    echo "Uso: $0 <access.log|access.log.gz|access.tar.gz|directorio>"
     exit 1
 fi
 
 INPUT="$1"
 
+
+###############################################################################
+# INPUT VALIDATION
+###############################################################################
+
+if [ -d "$INPUT" ]; then
+
+    run_directory_audit "$INPUT"
+    exit $?
+
+fi
+
+
 if [ ! -f "$INPUT" ]; then
-    echo "ERROR: no existe el fichero: $INPUT" >&2
+    echo "ERROR: no existe el fichero o directorio: $INPUT" >&2
     exit 1
 fi
 
+
+###############################################################################
+# FILE TYPE
+###############################################################################
 
 case "$INPUT" in
 
@@ -234,5 +347,3 @@ case "$INPUT" in
         ;;
 
 esac
-
-
