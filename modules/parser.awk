@@ -97,9 +97,6 @@ function parse_line(    request)
 
     parse_request(request)
 
-    if (detect_search(rec_query))
-	    register_search(rec_url "?" rec_query)
-
     if (match($0, /\[[^]]+\]/))
     {
         rec_timestamp = substr($0, RSTART + 1, RLENGTH - 2)
