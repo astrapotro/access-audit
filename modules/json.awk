@@ -307,6 +307,9 @@ function print_json(    top)
     print "}" > JSON_FILE
 
     close(JSON_FILE)
+
+    write_aggregate()
+
 }
 
 
@@ -404,4 +407,95 @@ function json_search_ranking(array, limit,    sorted, n, i, key, first)
 
     print "" > JSON_FILE
     print "    ]" > JSON_FILE
+}
+
+###############################################################################
+# AGGREGATE EXPORT
+###############################################################################
+
+function agg_escape(value,    s)
+{
+    s = value
+
+    gsub(/\|/, "%7C", s)
+    gsub(/\r/, "%0D", s)
+    gsub(/\n/, "%0A", s)
+    gsub(/\t/, "%09", s)
+
+    return s
+}
+
+
+function agg_ranking(array, type,    key)
+{
+    for (key in array)
+    {
+        if (key == "")
+            continue
+
+        printf "%s|%s|%d\n",
+               type,
+               agg_escape(key),
+               array[key] > AGG_FILE
+    }
+}
+
+
+function agg_slowest(    key)
+{
+    for (key in slow_time)
+    {
+        if (key == "")
+            continue
+
+        printf "slow|%.3f|%s|%d|%s|%s|%s|%s\n",
+               slow_time[key] / 1000000,
+               agg_escape(slow_ip[key]),
+               slow_status[key],
+               agg_escape(slow_method[key]),
+               agg_escape(slow_url[key]),
+               agg_escape(slow_host[key]),
+               agg_escape(slow_timestamp[key]) > AGG_FILE
+    }
+}
+
+
+function agg_attacks(    key)
+{
+    for (key in stat_attack)
+    {
+        if (key == "")
+            continue
+
+        printf "attack|%s|%d|%s|%s|%s\n",
+               agg_escape(key),
+               stat_attack[key],
+               agg_escape(attack_example[key]),
+               agg_escape(attack_ip[key]),
+               agg_escape(attack_timestamp[key]) > AGG_FILE
+    }
+}
+
+###############################################################################
+# WRITE AGGREGATE FILE
+###############################################################################
+
+function write_aggregate()
+{
+    agg_ranking(stat_ip,         "ip")
+    agg_ranking(stat_status,     "status")
+    agg_ranking(stat_host,       "host")
+    agg_ranking(stat_url,        "url")
+    agg_ranking(search_urls,     "search")
+    agg_ranking(stat_useragent,  "user_agent")
+    agg_ranking(stat_method,     "method")
+    agg_ranking(stat_referer,    "referer")
+    agg_ranking(stat_extension,  "extension")
+    agg_ranking(stat_bot,        "bot")
+    agg_ranking(stat_automation, "automation")
+
+    agg_slowest()
+    agg_attacks()
+
+    close(AGG_FILE)
 }

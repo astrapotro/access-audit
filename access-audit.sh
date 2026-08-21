@@ -114,6 +114,9 @@ run_log_audit()
 
     JSON_FILE="$LOGDIR/access-audit-$DATE.json"
 
+    AGG_FILE = JSON_FILE
+    sub(/\.json$/, ".agg", AGG_FILE)
+
     run_audit \
         "$LOGFILE" \
         "$TITLE" \
