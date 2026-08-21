@@ -9,7 +9,7 @@
 
     update_security()
 
-    update_search()
+##    update_search() ---> in modules/statistics.awk
     
     update_attacks()
 
