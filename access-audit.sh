@@ -37,6 +37,7 @@ run_audit()
     local AUDIT_FILE="$5"
     local CONFIGURATION="$6"
     local JSON_FILE="$7"
+    local AGG_FILE="$8"
 
     "$AWK" \
         -v AUDIT_TITLE="$TITLE" \
@@ -45,6 +46,7 @@ run_audit()
         -v AUDIT_FILE="$AUDIT_FILE" \
         -v AUDIT_CONFIGURATION="$CONFIGURATION" \
         -v JSON_FILE="$JSON_FILE" \
+        -v AGG_FILE="$AGG_FILE" \
         -f "$MODULES/globals.awk" \
         -f "$MODULES/utils.awk" \
         -f "$MODULES/parser.awk" \
@@ -54,6 +56,7 @@ run_audit()
         -f "$MODULES/report.awk" \
         -f "$MODULES/rankings.awk" \
         -f "$MODULES/json.awk" \
+	-f "$MODULES/aggregate.awk" \
         -f "$SCRIPT_DIR/access-audit.awk" \
         "$LOGFILE"
 }
@@ -114,17 +117,17 @@ run_log_audit()
 
     JSON_FILE="$LOGDIR/access-audit-$DATE.json"
 
-    AGG_FILE = JSON_FILE
-    sub(/\.json$/, ".agg", AGG_FILE)
+    AGG_FILE="${JSON_FILE%.json}.agg"
 
     run_audit \
-        "$LOGFILE" \
-        "$TITLE" \
-        "$DATE" \
-        "log" \
-        "$AUDIT_FILE" \
-        "$CONFIGURATION" \
-        "$JSON_FILE"
+    	"$LOGFILE" \
+	    "$TITLE" \
+	    "$DATE" \
+	    "log" \
+	    "$AUDIT_FILE" \
+	    "$CONFIGURATION" \
+	    "$JSON_FILE" \
+	    "$AGG_FILE"
 }
 
 ###############################################################################
