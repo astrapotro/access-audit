@@ -42,7 +42,7 @@ END {
 
     if (JSON_FILE != "")
     {
-##        print_json() > JSON_FILE
+        print_json()
         close(JSON_FILE)
     }
 

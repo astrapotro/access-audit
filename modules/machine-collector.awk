@@ -4,13 +4,13 @@
 #
 ###############################################################################
 #
-# Input:
-#
-#   access-audit-YYYY-MM-DD.json
-#
-# The corresponding aggregate file is expected next to the JSON:
+# Inputs:
 #
 #   access-audit-YYYY-MM-DD.agg
+#   access-audit-YYYY-MM-DD.json
+#
+# The .agg files are the source for machine/configuration aggregation.
+# The .json files are kept as the detailed domain audit.
 #
 ###############################################################################
 
@@ -19,13 +19,13 @@
 # CONFIGURATION
 ###############################################################################
 
-BEGIN
-{
+BEGIN {
     TOP = 50
 
-    current_configuration = ""
+    machine_requests = 0
+    machine_search_requests = 0
 
-    first_configuration = 1
+    first_config = 1
     first_domain = 1
 }
 
@@ -61,74 +61,75 @@ function read_file(filename,    line, content)
 
     close(filename)
 
+    sub(/\n$/, "", content)
+
     return content
 }
 
 
 ###############################################################################
-# RESET CONFIGURATION
+# PATH INFORMATION
 ###############################################################################
 
-function reset_configuration()
+function get_path_info(filename, parts,    n, i)
 {
-    delete conf_total
-    delete conf_latency
-    delete conf_security
-    delete conf_rank
+    n = split(filename, parts, "/")
 
-    delete conf_slow_time
-    delete conf_slow_ip
-    delete conf_slow_status
-    delete conf_slow_method
-    delete conf_slow_url
-    delete conf_slow_host
-    delete conf_slow_timestamp
-    conf_slow_count = 0
+    config = ""
+    domain = ""
 
-    delete conf_attack_hits
-    delete conf_attack_example
-    delete conf_attack_ip
-    delete conf_attack_timestamp
+    for (i = 1; i <= n; i++)
+    {
+        if (parts[i] ~ /^conf/)
+        {
+            config = parts[i]
+
+            if (i < n)
+                domain = parts[i + 1]
+        }
+    }
+
+    return config SUBSEP domain
 }
 
 
 ###############################################################################
-# RESET MACHINE
+# INITIALISE CONFIGURATION
 ###############################################################################
 
-function reset_machine()
+function init_config(config)
 {
-    delete machine_total
-    delete machine_latency
-    delete machine_security
-    delete machine_rank
+    if (!(config in config_seen))
+    {
+        config_seen[config] = 1
 
-    delete machine_slow_time
-    delete machine_slow_ip
-    delete machine_slow_status
-    delete machine_slow_method
-    delete machine_slow_url
-    delete machine_slow_host
-    delete machine_slow_timestamp
-    machine_slow_count = 0
+        config_requests[config] = 0
+        config_errors[config] = 0
+        config_bytes[config] = 0
+        config_search_requests[config] = 0
 
-    delete machine_attack_hits
-    delete machine_attack_example
-    delete machine_attack_ip
-    delete machine_attack_timestamp
+        config_latency_total[config] = 0
+        config_latency_min[config] = 0
+        config_latency_max[config] = 0
+
+        config_bot_requests[config] = 0
+        config_human_requests[config] = 0
+        config_automatic_requests[config] = 0
+    }
 }
 
 
 ###############################################################################
-# ADD RANKING
+# INITIALISE RANKING
 ###############################################################################
 
-function add_ranking(array, type, value, hits)
+function add_ranking(type, value, hits, config)
 {
     if (value == "")
         return
 
-    array[type SUBSEP value] += hits
+    machine_rank[type SUBSEP value] += hits
+    config_rank[config SUBSEP type SUBSEP value] += hits
 }
 
 
@@ -136,32 +137,27 @@ function add_ranking(array, type, value, hits)
 # ADD SLOW REQUEST
 ###############################################################################
 
-function add_slow(prefix, time_s, ip, status, method, url, host, timestamp,    n)
+function add_slow(config, time_s, ip, status, method, url, host, timestamp,    n)
 {
-    if (prefix == "conf")
-    {
-        n = ++conf_slow_count
+    n = ++machine_slow_count
 
-        conf_slow_time[n] = time_s
-        conf_slow_ip[n] = ip
-        conf_slow_status[n] = status
-        conf_slow_method[n] = method
-        conf_slow_url[n] = url
-        conf_slow_host[n] = host
-        conf_slow_timestamp[n] = timestamp
-    }
-    else
-    {
-        n = ++machine_slow_count
+    machine_slow_time[n] = time_s
+    machine_slow_ip[n] = ip
+    machine_slow_status[n] = status
+    machine_slow_method[n] = method
+    machine_slow_url[n] = url
+    machine_slow_host[n] = host
+    machine_slow_timestamp[n] = timestamp
 
-        machine_slow_time[n] = time_s
-        machine_slow_ip[n] = ip
-        machine_slow_status[n] = status
-        machine_slow_method[n] = method
-        machine_slow_url[n] = url
-        machine_slow_host[n] = host
-        machine_slow_timestamp[n] = timestamp
-    }
+    n = ++config_slow_count[config]
+
+    config_slow_time[config SUBSEP n] = time_s
+    config_slow_ip[config SUBSEP n] = ip
+    config_slow_status[config SUBSEP n] = status
+    config_slow_method[config SUBSEP n] = method
+    config_slow_url[config SUBSEP n] = url
+    config_slow_host[config SUBSEP n] = host
+    config_slow_timestamp[config SUBSEP n] = timestamp
 }
 
 
@@ -169,32 +165,31 @@ function add_slow(prefix, time_s, ip, status, method, url, host, timestamp,    n
 # ADD ATTACK
 ###############################################################################
 
-function add_attack(prefix, indicator, hits, example, ip, timestamp)
+function add_attack(config, indicator, hits, example, ip, timestamp)
 {
     if (indicator == "")
         return
 
-    if (prefix == "conf")
-    {
-        conf_attack_hits[indicator] += hits
+    machine_attack_hits[indicator] += hits
 
-        if (!(indicator in conf_attack_example))
-        {
-            conf_attack_example[indicator] = example
-            conf_attack_ip[indicator] = ip
-            conf_attack_timestamp[indicator] = timestamp
-        }
+    if (!(indicator in machine_attack_example) ||
+        hits > machine_attack_example_hits[indicator])
+    {
+        machine_attack_example_hits[indicator] = hits
+        machine_attack_example[indicator] = example
+        machine_attack_ip[indicator] = ip
+        machine_attack_timestamp[indicator] = timestamp
     }
-    else
-    {
-        machine_attack_hits[indicator] += hits
 
-        if (!(indicator in machine_attack_example))
-        {
-            machine_attack_example[indicator] = example
-            machine_attack_ip[indicator] = ip
-            machine_attack_timestamp[indicator] = timestamp
-        }
+    config_attack_hits[config SUBSEP indicator] += hits
+
+    if (!(config SUBSEP indicator in config_attack_example) ||
+        hits > config_attack_example_hits[config SUBSEP indicator])
+    {
+        config_attack_example_hits[config SUBSEP indicator] = hits
+        config_attack_example[config SUBSEP indicator] = example
+        config_attack_ip[config SUBSEP indicator] = ip
+        config_attack_timestamp[config SUBSEP indicator] = timestamp
     }
 }
 
@@ -203,28 +198,35 @@ function add_attack(prefix, indicator, hits, example, ip, timestamp)
 # PROCESS AGGREGATE
 ###############################################################################
 
-function process_aggregate(filename,    line, f, type, name, value, hits)
+function process_aggregate(filename,    line, f, n, type, config, value, hits)
 {
-    #
-    # If the aggregate file does not exist, simply return.
-    #
-    if ((getline line < filename) < 0)
-    {
-        close(filename)
-        return
-    }
+    config = ""
 
-    #
-    # Process first line and remaining lines.
-    #
-    do
+    while ((getline line < filename) > 0)
     {
         if (line == "")
             continue
 
-        split(line, f, "|")
+        n = split(line, f, "|")
 
         type = f[1]
+
+        #######################################################################
+        # METADATA
+        #######################################################################
+
+        if (type == "configuration")
+        {
+            config = f[2]
+            init_config(config)
+            continue
+        }
+
+        if (type == "title")
+            continue
+
+        if (type == "date")
+            continue
 
 
         #######################################################################
@@ -233,11 +235,29 @@ function process_aggregate(filename,    line, f, type, name, value, hits)
 
         if (type == "total")
         {
-            name = f[2]
             value = f[3] + 0
 
-            conf_total[name] += value
-            machine_total[name] += value
+            if (f[2] == "requests")
+            {
+                machine_requests += value
+                machine_total_requests += value
+                config_requests[config] += value
+            }
+            else if (f[2] == "errors")
+            {
+                machine_errors += value
+                config_errors[config] += value
+            }
+            else if (f[2] == "bytes")
+            {
+                machine_bytes += value
+                config_bytes[config] += value
+            }
+            else if (f[2] == "search_requests")
+            {
+                machine_search_requests += value
+                config_search_requests[config] += value
+            }
 
             continue
         }
@@ -249,11 +269,31 @@ function process_aggregate(filename,    line, f, type, name, value, hits)
 
         if (type == "latency")
         {
-            name = f[2]
             value = f[3] + 0
 
-            conf_latency[name] += value
-            machine_latency[name] += value
+            if (f[2] == "total_us")
+            {
+                machine_latency_total += value
+                config_latency_total[config] += value
+            }
+            else if (f[2] == "min_us")
+            {
+                if (config_latency_min[config] == 0 ||
+                    value < config_latency_min[config])
+                    config_latency_min[config] = value
+
+                if (machine_latency_min == 0 ||
+                    value < machine_latency_min)
+                    machine_latency_min = value
+            }
+            else if (f[2] == "max_us")
+            {
+                if (value > config_latency_max[config])
+                    config_latency_max[config] = value
+
+                if (value > machine_latency_max)
+                    machine_latency_max = value
+            }
 
             continue
         }
@@ -265,11 +305,23 @@ function process_aggregate(filename,    line, f, type, name, value, hits)
 
         if (type == "security")
         {
-            name = f[2]
             value = f[3] + 0
 
-            conf_security[name] += value
-            machine_security[name] += value
+            if (f[2] == "bot_requests")
+            {
+                machine_bot_requests += value
+                config_bot_requests[config] += value
+            }
+            else if (f[2] == "human_requests")
+            {
+                machine_human_requests += value
+                config_human_requests[config] += value
+            }
+            else if (f[2] == "automatic_requests")
+            {
+                machine_automatic_requests += value
+                config_automatic_requests[config] += value
+            }
 
             continue
         }
@@ -278,10 +330,10 @@ function process_aggregate(filename,    line, f, type, name, value, hits)
         #######################################################################
         # UNIQUE
         #
-        # Deliberately ignored at configuration/machine level.
+        # Deliberately ignored.
         #
-        # They cannot be summed because the same IP/URL/etc. can occur in
-        # several domains.
+        # Unique counters cannot be summed between domains because the same
+        # IP, URL, host, etc. may appear in several domains.
         #######################################################################
 
         if (type == "unique")
@@ -307,99 +359,88 @@ function process_aggregate(filename,    line, f, type, name, value, hits)
             value = f[2]
             hits = f[3] + 0
 
-            add_ranking(conf_rank, type, value, hits)
-            add_ranking(machine_rank, type, value, hits)
+            add_ranking(type, value, hits, config)
 
             continue
         }
 
 
         #######################################################################
-        # SLOWEST REQUESTS
+        # SLOWEST REQUEST
         #######################################################################
 
         if (type == "slow")
         {
-            add_slow(
-                "conf",
-                f[2] + 0,
-                f[3],
-                f[4] + 0,
-                f[5],
-                f[6],
-                f[7],
-                f[8]
-            )
-
-            add_slow(
-                "machine",
-                f[2] + 0,
-                f[3],
-                f[4] + 0,
-                f[5],
-                f[6],
-                f[7],
-                f[8]
-            )
-
+	    add_slow(config, f[2] + 0, f[3], f[4] + 0, f[5], f[6], f[7], f[8])
             continue
         }
 
 
         #######################################################################
-        # ATTACKS
+        # ATTACK
         #######################################################################
 
         if (type == "attack")
         {
-            add_attack(
-                "conf",
-                f[2],
-                f[3] + 0,
-                f[4],
-                f[5],
-                f[6]
-            )
-
-            add_attack(
-                "machine",
-                f[2],
-                f[3] + 0,
-                f[4],
-                f[5],
-                f[6]
-            )
-
+            add_attack(config, f[2], f[3] + 0, f[4], f[5], f[6])
             continue
         }
-
     }
-    while ((getline line < filename) > 0)
 
     close(filename)
 }
 
 
 ###############################################################################
-# GET RANKING VALUES
+# PROCESS JSON
 ###############################################################################
 
-function collect_ranking(array, type, values, hits,
-                          key, value, n)
+function process_json(filename,    info, parts, config, domain, content)
+{
+    info = get_path_info(filename, parts)
+
+    split(info, path_info, SUBSEP)
+
+    config = path_info[1]
+    domain = path_info[2]
+
+    if (config == "")
+        config = "unknown"
+
+    if (domain == "")
+        domain = "unknown"
+
+    init_config(config)
+
+    content = read_file(filename)
+
+    domain_json[config SUBSEP domain] = content
+    domain_seen[config SUBSEP domain] = 1
+
+    domain_config[domain] = config
+}
+
+
+###############################################################################
+# COLLECT RANKING
+###############################################################################
+
+function collect_machine_ranking(type, values, hits,
+                                  key, value, n)
 {
     delete values
     delete hits
 
     n = 0
 
-    for (key in array)
+    for (key in machine_rank)
     {
         if (index(key, type SUBSEP) == 1)
         {
             value = substr(key, length(type) + 2)
 
             values[++n] = value
-            hits[value] = array[key]
+            hits[value] = machine_rank[key]
         }
     }
 
@@ -408,30 +449,30 @@ function collect_ranking(array, type, values, hits,
 
 
 ###############################################################################
-# SORT RANKING
+# COLLECT CONFIGURATION RANKING
 ###############################################################################
 
-function sort_ranking(values, hits, n,    i, j, tmp)
+function collect_config_ranking(config, type, values, hits,
+                                key, value, prefix, n)
 {
-    #
-    # TOP 50 only.
-    #
-    # Selection-style sorting is enough here because the number of distinct
-    # entries comes from the TOP 50 of each domain.
-    #
+    delete values
+    delete hits
 
-    for (i = 1; i <= n; i++)
+    n = 0
+    prefix = config SUBSEP type SUBSEP
+
+    for (key in config_rank)
     {
-        for (j = i + 1; j <= n; j++)
+        if (index(key, prefix) == 1)
         {
-            if (hits[values[j]] > hits[values[i]])
-            {
-                tmp = values[i]
-                values[i] = values[j]
-                values[j] = tmp
-            }
+            value = substr(key, length(prefix) + 1)
+
+            values[++n] = value
+            hits[value] = config_rank[key]
         }
     }
+
+    return n
 }
 
 
@@ -439,12 +480,11 @@ function sort_ranking(values, hits, n,    i, j, tmp)
 # PRINT RANKING
 ###############################################################################
 
-function print_ranking(array, type, total,
-                       values, hits, n, limit, i, value, first)
+function print_ranking(values, hits, n, total,
+                       indent, percent_total,
+                       sorted, i, limit, value)
 {
-    n = collect_ranking(array, type, values, hits)
-
-    sort_ranking(values, hits, n)
+    asorti(hits, sorted, "@val_num_desc")
 
     limit = n
 
@@ -453,81 +493,162 @@ function print_ranking(array, type, total,
 
     print "["
 
-    first = 1
-
     for (i = 1; i <= limit; i++)
     {
-        value = values[i]
+        value = sorted[i]
 
-        if (!first)
+        if (i > 1)
             print ","
 
-        printf "        {\"value\":\"%s\",\"hits\":%d,\"percent\":%.3f}",
+        if (percent_total > 0)
+            percent = (hits[value] / percent_total) * 100
+        else
+            percent = 0
+
+        printf "%s{\"value\":\"%s\",\"hits\":%d,\"percent\":%.3f}",
+               indent,
                json_escape(value),
                hits[value],
-               total > 0 ? (hits[value] / total) * 100 : 0
-
-        first = 0
+               percent
     }
 
     print ""
-    print "      ]"
+    printf "%s]", indent
 }
 
 
 ###############################################################################
-# PRINT RANKINGS
+# PRINT MACHINE RANKINGS
 ###############################################################################
 
-function print_rankings(array, total)
+function print_machine_rankings()
+{
+    print "  \"rankings\": {"
+    print "    \"limit\":50,"
+
+    n = collect_machine_ranking("ip", values, hits)
+    printf "    \"ips\":"
+    print_ranking(values, hits, n, machine_requests, "    ", machine_requests)
+    print ","
+
+    n = collect_machine_ranking("status", values, hits)
+    printf "    \"status\":"
+    print_ranking(values, hits, n, machine_requests, "    ", machine_requests)
+    print ","
+
+    n = collect_machine_ranking("host", values, hits)
+    printf "    \"hosts\":"
+    print_ranking(values, hits, n, machine_requests, "    ", machine_requests)
+    print ","
+
+    n = collect_machine_ranking("url", values, hits)
+    printf "    \"urls\":"
+    print_ranking(values, hits, n, machine_requests, "    ", machine_requests)
+    print ","
+
+    n = collect_machine_ranking("search", values, hits)
+    printf "    \"search\":"
+    print_ranking(values, hits, n, machine_search_requests, "    ", machine_search_requests)
+    print ","
+
+    n = collect_machine_ranking("user_agent", values, hits)
+    printf "    \"user_agents\":"
+    print_ranking(values, hits, n, machine_requests, "    ", machine_requests)
+    print ","
+
+    n = collect_machine_ranking("method", values, hits)
+    printf "    \"methods\":"
+    print_ranking(values, hits, n, machine_requests, "    ", machine_requests)
+    print ","
+
+    n = collect_machine_ranking("referer", values, hits)
+    printf "    \"referers\":"
+    print_ranking(values, hits, n, machine_requests, "    ", machine_requests)
+    print ","
+
+    n = collect_machine_ranking("extension", values, hits)
+    printf "    \"extensions\":"
+    print_ranking(values, hits, n, machine_requests, "    ", machine_requests)
+    print ","
+
+    n = collect_machine_ranking("bot", values, hits)
+    printf "    \"bots\":"
+    print_ranking(values, hits, n, machine_requests, "    ", machine_requests)
+    print ","
+
+    n = collect_machine_ranking("automation", values, hits)
+    printf "    \"automation\":"
+    print_ranking(values, hits, n, machine_requests, "    ", machine_requests)
+
+    print ""
+    print "  },"
+}
+
+
+###############################################################################
+# PRINT CONFIGURATION RANKINGS
+###############################################################################
+
+function print_config_rankings(config)
 {
     print "    \"rankings\": {"
-
     print "      \"limit\":50,"
 
+    n = collect_config_ranking(config, "ip", values, hits)
     printf "      \"ips\":"
-    print_ranking(array, "ip", total)
+    print_ranking(values, hits, n, config_requests[config], "      ", config_requests[config])
     print ","
 
+    n = collect_config_ranking(config, "status", values, hits)
     printf "      \"status\":"
-    print_ranking(array, "status", total)
+    print_ranking(values, hits, n, config_requests[config], "      ", config_requests[config])
     print ","
 
+    n = collect_config_ranking(config, "host", values, hits)
     printf "      \"hosts\":"
-    print_ranking(array, "host", total)
+    print_ranking(values, hits, n, config_requests[config], "      ", config_requests[config])
     print ","
 
+    n = collect_config_ranking(config, "url", values, hits)
     printf "      \"urls\":"
-    print_ranking(array, "url", total)
+    print_ranking(values, hits, n, config_requests[config], "      ", config_requests[config])
     print ","
 
+    n = collect_config_ranking(config, "search", values, hits)
     printf "      \"search\":"
-    print_ranking(array, "search", total)
+    print_ranking(values, hits, n, config_search_requests[config], "      ", config_search_requests[config])
     print ","
 
+    n = collect_config_ranking(config, "user_agent", values, hits)
     printf "      \"user_agents\":"
-    print_ranking(array, "user_agent", total)
+    print_ranking(values, hits, n, config_requests[config], "      ", config_requests[config])
     print ","
 
+    n = collect_config_ranking(config, "method", values, hits)
     printf "      \"methods\":"
-    print_ranking(array, "method", total)
+    print_ranking(values, hits, n, config_requests[config], "      ", config_requests[config])
     print ","
 
+    n = collect_config_ranking(config, "referer", values, hits)
     printf "      \"referers\":"
-    print_ranking(array, "referer", total)
+    print_ranking(values, hits, n, config_requests[config], "      ", config_requests[config])
     print ","
 
+    n = collect_config_ranking(config, "extension", values, hits)
     printf "      \"extensions\":"
-    print_ranking(array, "extension", total)
+    print_ranking(values, hits, n, config_requests[config], "      ", config_requests[config])
     print ","
 
+    n = collect_config_ranking(config, "bot", values, hits)
     printf "      \"bots\":"
-    print_ranking(array, "bot", total)
+    print_ranking(values, hits, n, config_requests[config], "      ", config_requests[config])
     print ","
 
+    n = collect_config_ranking(config, "automation", values, hits)
     printf "      \"automation\":"
-    print_ranking(array, "automation", total)
+    print_ranking(values, hits, n, config_requests[config], "      ", config_requests[config])
 
+    print ""
     print "    },"
 }
 
@@ -536,23 +657,14 @@ function print_rankings(array, total)
 # PRINT TOTALS
 ###############################################################################
 
-function print_totals(total)
+function print_requests(requests, errors, bytes, searches, indent)
 {
-    print "    \"requests\": {"
-
-    printf "      \"total\":%d,\n",
-           total["requests"]
-
-    printf "      \"errors\":%d,\n",
-           total["errors"]
-
-    printf "      \"bytes\":%d,\n",
-           total["bytes"]
-
-    printf "      \"search requests\":%d\n",
-           total["search_requests"]
-
-    print "    },"
+    printf "%s\"requests\": {\n", indent
+    printf "%s  \"total\":%d,\n", indent, requests
+    printf "%s  \"errors\":%d,\n", indent, errors
+    printf "%s  \"bytes\":%d,\n", indent, bytes
+    printf "%s  \"search requests\":%d\n", indent, searches
+    printf "%s}", indent
 }
 
 
@@ -560,32 +672,33 @@ function print_totals(total)
 # PRINT LATENCY
 ###############################################################################
 
-function print_latency(latency, requests)
+function print_latency(total, min, max, requests, indent)
 {
-    print "    \"latency\": {"
-
-    printf "      \"total_us\":%d,\n",
-           latency["total_us"]
+    printf "%s\"latency\": {\n", indent
+    printf "%s  \"total_us\":%d,\n", indent, total
 
     if (requests > 0)
     {
-        printf "      \"avg_ms\":%.3f,\n",
-               latency["total_us"] / requests / 1000
+        printf "%s  \"avg_ms\":%.3f,\n",
+               indent,
+               total / requests / 1000
 
-        printf "      \"min_ms\":%.3f,\n",
-               latency["min_us"] / 1000
+        printf "%s  \"min_ms\":%.3f,\n",
+               indent,
+               min / 1000
 
-        printf "      \"max_ms\":%.3f\n",
-               latency["max_us"] / 1000
+        printf "%s  \"max_ms\":%.3f\n",
+               indent,
+               max / 1000
     }
     else
     {
-        print "      \"avg_ms\":0,"
-        print "      \"min_ms\":0,"
-        print "      \"max_ms\":0"
+        printf "%s  \"avg_ms\":0,\n", indent
+        printf "%s  \"min_ms\":0,\n", indent
+        printf "%s  \"max_ms\":0\n", indent
     }
 
-    print "    },"
+    printf "%s}", indent
 }
 
 
@@ -593,350 +706,330 @@ function print_latency(latency, requests)
 # PRINT SECURITY
 ###############################################################################
 
-function print_security(security)
+function print_security(bot, human, automatic, indent)
 {
-    print "    \"security\": {"
-
-    printf "      \"bot_requests\":%d,\n",
-           security["bot_requests"]
-
-    printf "      \"human_requests\":%d,\n",
-           security["human_requests"]
-
-    printf "      \"automatic_requests\":%d\n",
-           security["automatic_requests"]
-
-    print "    },"
+    printf "%s\"security\": {\n", indent
+    printf "%s  \"bot_requests\":%d,\n", indent, bot
+    printf "%s  \"human_requests\":%d,\n", indent, human
+    printf "%s  \"automatic_requests\":%d\n", indent, automatic
+    printf "%s}", indent
 }
 
 
 ###############################################################################
-# PRINT SLOWEST REQUESTS
+# PRINT SLOWEST
 ###############################################################################
 
-function print_slowest(prefix)
+function print_slowest_machine()
 {
-    if (prefix == "conf")
+    print "  \"slowest_requests\": ["
+
+    delete slow_index
+
+    for (i = 1; i <= machine_slow_count; i++)
+        slow_index[i] = machine_slow_time[i]
+
+    asorti(slow_index, sorted, "@val_num_desc")
+
+    limit = machine_slow_count
+
+    if (limit > TOP)
+        limit = TOP
+
+    for (i = 1; i <= limit; i++)
     {
-        count = conf_slow_count
-        time = conf_slow_time
-        ip = conf_slow_ip
-        status = conf_slow_status
-        method = conf_slow_method
-        url = conf_slow_url
-        host = conf_slow_host
-        timestamp = conf_slow_timestamp
-    }
-    else
-    {
-        count = machine_slow_count
-        time = machine_slow_time
-        ip = machine_slow_ip
-        status = machine_slow_status
-        method = machine_slow_method
-        url = machine_slow_url
-        host = machine_slow_host
-        timestamp = machine_slow_timestamp
+        n = sorted[i]
+
+        if (i > 1)
+            print ","
+
+        printf "    {\"time_s\":%.3f,\"ip\":\"%s\",\"status\":%d,\"method\":\"%s\",\"url\":\"%s\",\"host\":\"%s\",\"timestamp\":\"%s\"}",
+               machine_slow_time[n],
+               json_escape(machine_slow_ip[n]),
+               machine_slow_status[n],
+               json_escape(machine_slow_method[n]),
+               json_escape(machine_slow_url[n]),
+               json_escape(machine_slow_host[n]),
+               json_escape(machine_slow_timestamp[n])
     }
 
-    #
-    # Create indexes.
-    #
-    delete slow_order
+    print ""
+    print "  ],"
+}
+
+
+###############################################################################
+# PRINT CONFIGURATION SLOWEST
+###############################################################################
+
+function print_config_slowest(config,    prefix, i, n, count, order, limit)
+{
+    count = config_slow_count[config]
+
+    printf "      \"slowest_requests\": ["
+
+    if (count == 0)
+    {
+        print "],"
+        return
+    }
+
+    delete order
 
     for (i = 1; i <= count; i++)
-        slow_order[i] = time[i]
+        order[i] = config_slow_time[config SUBSEP i]
 
-    #
-    # Sort descending.
-    #
-    for (i = 1; i <= count; i++)
-    {
-        for (j = i + 1; j <= count; j++)
-        {
-            if (slow_order[j] > slow_order[i])
-            {
-                tmp = slow_order[i]
-                slow_order[i] = slow_order[j]
-                slow_order[j] = tmp
-            }
-        }
-    }
+    asorti(order, sorted, "@val_num_desc")
 
     limit = count
 
     if (limit > TOP)
         limit = TOP
 
-    print "    \"slowest_requests\": ["
-
-    first = 1
-
-    delete slow_used
-
     for (i = 1; i <= limit; i++)
     {
-        target_time = slow_order[i]
-
-        for (j = 1; j <= count; j++)
-        {
-            if (!slow_used[j] && time[j] == target_time)
-            {
-                if (!first)
-                    print ","
-
-                printf "      {\"time_s\":%.3f,\"ip\":\"%s\",\"status\":%d,\"method\":\"%s\",\"url\":\"%s\",\"host\":\"%s\",\"timestamp\":\"%s\"}",
-                       time[j],
-                       json_escape(ip[j]),
-                       status[j],
-                       json_escape(method[j]),
-                       json_escape(url[j]),
-                       json_escape(host[j]),
-                       json_escape(timestamp[j])
-
-                slow_used[j] = 1
-                first = 0
-
-                break
-            }
-        }
-    }
-
-    print ""
-    print "    ],"
-}
-
-
-###############################################################################
-# PRINT ATTACKS
-###############################################################################
-
-function print_attacks(prefix)
-{
-    if (prefix == "conf")
-    {
-        hits = conf_attack_hits
-        example = conf_attack_example
-        ip = conf_attack_ip
-        timestamp = conf_attack_timestamp
-    }
-    else
-    {
-        hits = machine_attack_hits
-        example = machine_attack_example
-        ip = machine_attack_ip
-        timestamp = machine_attack_timestamp
-    }
-
-    delete attack_order
-
-    n = 0
-
-    for (key in hits)
-        attack_order[++n] = key
-
-    #
-    # Sort by hits.
-    #
-    for (i = 1; i <= n; i++)
-    {
-        for (j = i + 1; j <= n; j++)
-        {
-            if (hits[attack_order[j]] >
-                hits[attack_order[i]])
-            {
-                tmp = attack_order[i]
-                attack_order[i] = attack_order[j]
-                attack_order[j] = tmp
-            }
-        }
-    }
-
-    print "    \"attacks\": ["
-
-    for (i = 1; i <= n; i++)
-    {
-        key = attack_order[i]
+        n = sorted[i]
 
         if (i > 1)
             print ","
 
-        printf "      {\"indicator\":\"%s\",\"hits\":%d,\"example\":\"%s\",\"ip\":\"%s\",\"timestamp\":\"%s\"}",
-               json_escape(key),
-               hits[key],
-               json_escape(example[key]),
-               json_escape(ip[key]),
-               json_escape(timestamp[key])
+        printf "        {\"time_s\":%.3f,\"ip\":\"%s\",\"status\":%d,\"method\":\"%s\",\"url\":\"%s\",\"host\":\"%s\",\"timestamp\":\"%s\"}",
+               config_slow_time[config SUBSEP n],
+               json_escape(config_slow_ip[config SUBSEP n]),
+               config_slow_status[config SUBSEP n],
+               json_escape(config_slow_method[config SUBSEP n]),
+               json_escape(config_slow_url[config SUBSEP n]),
+               json_escape(config_slow_host[config SUBSEP n]),
+               json_escape(config_slow_timestamp[config SUBSEP n])
     }
 
     print ""
-    print "    ]"
+    print "      ],"
 }
 
 
 ###############################################################################
-# PRINT CONFIGURATION AGGREGATE
+# PRINT ATTACKS - MACHINE
 ###############################################################################
 
-function print_configuration_aggregate()
+function print_machine_attacks(    n, i, key, sorted, indicator)
 {
-    print "      \"requests\": {"
+    n = asorti(machine_attack_hits, sorted, "@val_num_desc")
 
-    printf "        \"total\":%d,\n",
-           conf_total["requests"]
+    print "  \"attacks\": ["
 
-    printf "        \"errors\":%d,\n",
-           conf_total["errors"]
-
-    printf "        \"bytes\":%d,\n",
-           conf_total["bytes"]
-
-    printf "        \"search requests\":%d\n",
-           conf_total["search_requests"]
-
-    print "      },"
-
-    print "      \"latency\": {"
-
-    printf "        \"total_us\":%d,\n",
-           conf_latency["total_us"]
-
-    if (conf_total["requests"] > 0)
+    for (i = 1; i <= n; i++)
     {
-        printf "        \"avg_ms\":%.3f,\n",
-               conf_latency["total_us"] /
-               conf_total["requests"] / 1000
+        indicator = sorted[i]
 
-        printf "        \"min_ms\":%.3f,\n",
-               conf_latency["min_us"] / 1000
+        if (i > 1)
+            print ","
 
-        printf "        \"max_ms\":%.3f\n",
-               conf_latency["max_us"] / 1000
-    }
-    else
-    {
-        print "        \"avg_ms\":0,"
-        print "        \"min_ms\":0,"
-        print "        \"max_ms\":0"
+        printf "    {\"indicator\":\"%s\",\"hits\":%d,\"example\":\"%s\",\"ip\":\"%s\",\"timestamp\":\"%s\"}",
+               json_escape(indicator),
+               machine_attack_hits[indicator],
+               json_escape(machine_attack_example[indicator]),
+               json_escape(machine_attack_ip[indicator]),
+               json_escape(machine_attack_timestamp[indicator])
     }
 
-    print "      },"
+    print ""
+    print "  ],"
+}
 
-    print "      \"security\": {"
 
-    printf "        \"bot_requests\":%d,\n",
-           conf_security["bot_requests"]
+###############################################################################
+# PRINT ATTACKS - CONFIGURATION
+###############################################################################
 
-    printf "        \"human_requests\":%d,\n",
-           conf_security["human_requests"]
+function print_config_attacks(config,    prefix, n, i, key, sorted, indicator)
+{
+    prefix = config SUBSEP
 
-    printf "        \"automatic_requests\":%d\n",
-           conf_security["automatic_requests"]
+    delete attack_values
 
-    print "      },"
+    n = 0
 
-    #
+    for (key in config_attack_hits)
+    {
+        if (index(key, prefix) == 1)
+        {
+            indicator = substr(key, length(prefix) + 1)
+
+            attack_values[indicator] = config_attack_hits[key]
+        }
+    }
+
+    n = asorti(attack_values, sorted, "@val_num_desc")
+
+    print "      \"attacks\": ["
+
+    for (i = 1; i <= n; i++)
+    {
+        indicator = sorted[i]
+
+        if (i > 1)
+            print ","
+
+        printf "        {\"indicator\":\"%s\",\"hits\":%d,\"example\":\"%s\",\"ip\":\"%s\",\"timestamp\":\"%s\"}",
+               json_escape(indicator),
+               attack_values[indicator],
+               json_escape(config_attack_example[prefix indicator]),
+               json_escape(config_attack_ip[prefix indicator]),
+               json_escape(config_attack_timestamp[prefix indicator])
+    }
+
+    print ""
+    print "      ],"
+}
+
+
+###############################################################################
+# PRINT DOMAINS
+###############################################################################
+
+function print_domains(config,    key, domain, prefix, n, sorted, i)
+{
+    prefix = config SUBSEP
+
+    delete domains
+
+    n = 0
+
+    for (key in domain_seen)
+    {
+        if (index(key, prefix) == 1)
+        {
+            domain = substr(key, length(prefix) + 1)
+            domains[++n] = domain
+        }
+    }
+
+    asort(domains)
+
+    print "      \"domains\": ["
+
+    for (i = 1; i <= n; i++)
+    {
+        domain = domains[i]
+
+        if (i > 1)
+            print ","
+
+        printf "        {\"domain\":\"%s\",\"audit\":%s}",
+               json_escape(domain),
+               domain_json[config SUBSEP domain]
+    }
+
+    print ""
+    print "      ]"
+}
+
+
+###############################################################################
+# PRINT CONFIGURATION
+###############################################################################
+
+function print_configuration(config)
+{
+    print "    {"
+
+    printf "      \"configuration\":\"%s\",\n",
+           json_escape(config)
+
+    print "      \"audit\": {"
+
+    print_requests(config_requests[config], config_errors[config], config_bytes[config], config_search_requests[config], "        ")
+
+    print ","
+
+    print_latency(config_latency_total[config],config_latency_min[config],config_latency_max[config],config_requests[config],"        ")
+
+    print ","
+
+    print_security(config_bot_requests[config],config_human_requests[config],config_automatic_requests[config],"        ")
+
+    print ","
+
     # Rankings
-    #
-    print "      \"rankings\": {"
+    print_config_rankings(config)
 
-    print "        \"limit\":50,"
+    # slowest_requests
+    print_config_slowest(config)
 
-    printf "        \"ips\":"
-    print_ranking(conf_rank, "ip", conf_total["requests"])
-    print ","
+    # attacks
+    print_config_attacks(config)
 
-    printf "        \"status\":"
-    print_ranking(conf_rank, "status", conf_total["requests"])
-    print ","
+    # domains
+    print_domains(config)
 
-    printf "        \"hosts\":"
-    print_ranking(conf_rank, "host", conf_total["requests"])
-    print ","
-
-    printf "        \"urls\":"
-    print_ranking(conf_rank, "url", conf_total["requests"])
-    print ","
-
-    printf "        \"search\":"
-    print_ranking(conf_rank, "search", conf_total["search_requests"])
-    print ","
-
-    printf "        \"user_agents\":"
-    print_ranking(conf_rank, "user_agent", conf_total["requests"])
-    print ","
-
-    printf "        \"methods\":"
-    print_ranking(conf_rank, "method", conf_total["requests"])
-    print ","
-
-    printf "        \"referers\":"
-    print_ranking(conf_rank, "referer", conf_total["requests"])
-    print ","
-
-    printf "        \"extensions\":"
-    print_ranking(conf_rank, "extension", conf_total["requests"])
-    print ","
-
-    printf "        \"bots\":"
-    print_ranking(conf_rank, "bot", conf_total["requests"])
-    print ","
-
-    printf "        \"automation\":"
-    print_ranking(conf_rank, "automation", conf_total["requests"])
-
-    print "      },"
-
-    #
-    # Slowest requests
-    #
-    print_slowest("conf")
-
-    #
-    # Attacks
-    #
-    print_attacks("conf")
+    print "      }"
+    print "    }"
 }
 
 
 ###############################################################################
-# PRINT MACHINE AGGREGATE
+# PROCESS INPUT FILES
 ###############################################################################
 
-function print_machine_aggregate()
 {
+    if (FILENAME ~ /\.agg$/)
+        process_aggregate(FILENAME)
+    else if (FILENAME ~ /\.json$/)
+        process_json(FILENAME)
+}
+
+###############################################################################
+# END
+###############################################################################
+
+END {
+    ###########################################################################
+    # MACHINE JSON
+    ###########################################################################
+
+    print "{"
+
+    printf "  \"date\":\"%s\",\n",
+           json_escape(DATE)
+
+    printf "  \"source\":\"%s\",\n",
+           json_escape(SOURCE)
+
+    printf "  \"machine\":\"%s\",\n",
+           json_escape(MACHINE)
+
     print "  \"requests\": {"
 
     printf "    \"total\":%d,\n",
-           machine_total["requests"]
+           machine_requests
 
     printf "    \"errors\":%d,\n",
-           machine_total["errors"]
+           machine_errors
 
     printf "    \"bytes\":%d,\n",
-           machine_total["bytes"]
+           machine_bytes
 
     printf "    \"search requests\":%d\n",
-           machine_total["search_requests"]
+           machine_search_requests
 
     print "  },"
 
     print "  \"latency\": {"
 
     printf "    \"total_us\":%d,\n",
-           machine_latency["total_us"]
+           machine_latency_total
 
-    if (machine_total["requests"] > 0)
+    if (machine_requests > 0)
     {
         printf "    \"avg_ms\":%.3f,\n",
-               machine_latency["total_us"] /
-               machine_total["requests"] / 1000
+               machine_latency_total / machine_requests / 1000
 
         printf "    \"min_ms\":%.3f,\n",
-               machine_latency["min_us"] / 1000
+               machine_latency_min / 1000
 
         printf "    \"max_ms\":%.3f\n",
-               machine_latency["max_us"] / 1000
+               machine_latency_max / 1000
     }
     else
     {
@@ -950,245 +1043,58 @@ function print_machine_aggregate()
     print "  \"security\": {"
 
     printf "    \"bot_requests\":%d,\n",
-           machine_security["bot_requests"]
+           machine_bot_requests
 
     printf "    \"human_requests\":%d,\n",
-           machine_security["human_requests"]
+           machine_human_requests
 
     printf "    \"automatic_requests\":%d\n",
-           machine_security["automatic_requests"]
+           machine_automatic_requests
 
     print "  },"
 
-    #
-    # Rankings
-    #
-    print "  \"rankings\": {"
-
-    print "    \"limit\":50,"
-
-    printf "    \"ips\":"
-    print_ranking(machine_rank, "ip", machine_total["requests"])
-    print ","
-
-    printf "    \"status\":"
-    print_ranking(machine_rank, "status", machine_total["requests"])
-    print ","
-
-    printf "    \"hosts\":"
-    print_ranking(machine_rank, "host", machine_total["requests"])
-    print ","
-
-    printf "    \"urls\":"
-    print_ranking(machine_rank, "url", machine_total["requests"])
-    print ","
-
-    printf "    \"search\":"
-    print_ranking(machine_rank, "search", machine_total["search_requests"])
-    print ","
-
-    printf "    \"user_agents\":"
-    print_ranking(machine_rank, "user_agent", machine_total["requests"])
-    print ","
-
-    printf "    \"methods\":"
-    print_ranking(machine_rank, "method", machine_total["requests"])
-    print ","
-
-    printf "    \"referers\":"
-    print_ranking(machine_rank, "referer", machine_total["requests"])
-    print ","
-
-    printf "    \"extensions\":"
-    print_ranking(machine_rank, "extension", machine_total["requests"])
-    print ","
-
-    printf "    \"bots\":"
-    print_ranking(machine_rank, "bot", machine_total["requests"])
-    print ","
-
-    printf "    \"automation\":"
-    print_ranking(machine_rank, "automation", machine_total["requests"])
-
-    print "  },"
-
-    #
-    # Slowest
-    #
-    print_slowest("machine")
-
-    #
-    # Attacks
-    #
-    print_attacks("machine")
-}
-
-
-###############################################################################
-# MAIN
-###############################################################################
-
-{
-    JSON_FILE = FILENAME
-
     ###########################################################################
-    # Extract configuration and domain from:
-    #
-    # /tmp/access-audit/conf_r01/sede/access-audit-2026-08-19.json
-    #
+    # MACHINE RANKINGS
     ###########################################################################
 
-    path = JSON_FILE
-
-    sub(/^.*\/access-audit-[0-9]{4}-[0-9]{2}-[0-9]{2}\.json$/, "", path)
-
-    #
-    # Get domain.
-    #
-    tmp = JSON_FILE
-
-    sub(/^.*\//, "", tmp)
-    sub(/^access-audit-[0-9]{4}-[0-9]{2}-[0-9]{2}\.json$/, "", tmp)
-
-    #
-    # Remove trailing slash.
-    #
-    domain = tmp
-
-    #
-    # Configuration = directory immediately before domain.
-    #
-    tmp = JSON_FILE
-    sub(/\/[^/]+\/access-audit-[0-9]{4}-[0-9]{2}-[0-9]{2}\.json$/, "", tmp)
-    sub(/^.*\//, "", tmp)
-
-    configuration = tmp
-
+    print_machine_rankings()
 
     ###########################################################################
-    # Configuration change
+    # MACHINE SLOWEST
     ###########################################################################
 
-    if (current_configuration != configuration)
+    print_slowest_machine()
+
+    ###########################################################################
+    # MACHINE ATTACKS
+    ###########################################################################
+
+    print_machine_attacks()
+
+    ###########################################################################
+    # CONFIGURATIONS
+    ###########################################################################
+
+    print "  \"configurations\": ["
+
+    delete configs
+    n_configs = 0
+
+    for (config in config_seen)
+        configs[++n_configs] = config
+
+    asort(configs)
+
+    for (i = 1; i <= n_configs; i++)
     {
-        #
-        # Finish previous configuration.
-        #
-        if (current_configuration != "")
-        {
-            print "      ],"
+        if (i > 1)
+            print ","
 
-            print_configuration_aggregate()
-
-            print "    }"
-            print "  ],"
-        }
-
-        #
-        # Start new configuration.
-        #
-        current_configuration = configuration
-
-        reset_configuration()
-
-        #
-        # Configuration header.
-        #
-        print "    {"
-
-        printf "      \"configuration\":\"%s\",\n",
-               json_escape(configuration)
-
-        print "      \"domains\": ["
-
-        first_domain = 1
+        print_configuration(configs[i])
     }
-
-
-    ###########################################################################
-    # Domain separator
-    ###########################################################################
-
-    if (!first_domain)
-        print ","
-
-    first_domain = 0
-
-
-    ###########################################################################
-    # Corresponding aggregate file
-    ###########################################################################
-
-    AGG_FILE = JSON_FILE
-
-    sub(/\.json$/, ".agg", AGG_FILE)
-
-
-    ###########################################################################
-    # Read aggregate
-    ###########################################################################
-
-    process_aggregate(AGG_FILE)
-
-
-    ###########################################################################
-    # Read complete domain JSON
-    ###########################################################################
-
-    DOMAIN_JSON = read_file(JSON_FILE)
-
-
-    ###########################################################################
-    # Domain
-    ###########################################################################
-
-    print "        {"
-
-    printf "          \"domain\":\"%s\",\n",
-           json_escape(domain)
-
-    printf "          \"audit\":%s",
-           DOMAIN_JSON
 
     print ""
-    print "        }"
-}
+    print "  ]"
 
-
-###############################################################################
-# END
-###############################################################################
-
-END
-{
-    ###########################################################################
-    # Close last configuration
-    ###########################################################################
-
-    if (current_configuration != "")
-    {
-        print "      ],"
-
-        print_configuration_aggregate()
-
-        print "    }"
-        print "  ],"
-    }
-
-
-    ###########################################################################
-    # Machine aggregate
-    ###########################################################################
-
-    print "  \"date\":\"" json_escape(DATE) "\","
-    print "  \"machine\":\"" json_escape(MACHINE) "\","
-    print "  \"source\":\"" json_escape(SOURCE) "\","
-
-    print_machine_aggregate()
-
-    #
-    # print_machine_aggregate() leaves the attacks array as the last member,
-    # so we only need to close the root object.
-    #
     print "}"
 }

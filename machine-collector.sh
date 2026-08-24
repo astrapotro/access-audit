@@ -20,8 +20,10 @@ AWK=$(command -v gawk)
 
 if [ -z "$AWK" ]
 then
-    error "gawk not found"
+    echo "ERROR: gawk not found" >&2
+    exit 1
 fi
+
 
 ###############################################################################
 # FUNCTIONS
@@ -78,26 +80,42 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 
 ###############################################################################
-# COLLECT JSON FILES
+# COLLECT INPUT FILES
 ###############################################################################
 
 JSON_FILES=()
+AGG_FILES=()
 
 
 ###############################################################################
-# 1. JSON FILES FROM /tmp
+# 1. JSON + AGG FILES FROM /tmp
 ###############################################################################
 
-while IFS= read -r -d '' JSON_FILE
+while IFS= read -r -d '' FILE
 do
-    JSON_FILES+=("$JSON_FILE")
+
+    case "$FILE" in
+
+        *.json)
+            JSON_FILES+=("$FILE")
+            ;;
+
+        *.agg)
+            AGG_FILES+=("$FILE")
+            ;;
+
+    esac
 
 done < <(
     find "$AUDIT_OUTPUT_DIR" \
-        -mindepth 2 \
+        -mindepth 3 \
         -maxdepth 3 \
         -type f \
-        -name "access-audit-$DATE.json" \
+        \( \
+            -name "access-audit-$DATE.json" \
+            -o \
+            -name "access-audit-$DATE.agg" \
+        \) \
         -not -path "$MACHINE_OUTPUT_DIR/*" \
         -print0 |
     sort -z
@@ -105,50 +123,111 @@ done < <(
 
 
 ###############################################################################
-# 2. IF NONE FOUND, USE HISTORICAL TAR
+# 2. CHECK WHETHER INPUT FILES ARE COMPLETE
+#
+# Compare the files actually present with the files available in the
+# historical TAR. Counts alone are not sufficient: one JSON and one AGG
+# can be missing while both counts remain equal.
 ###############################################################################
 
-if [ "${#JSON_FILES[@]}" -eq 0 ]
+if [ ! -f "$TAR_FILE" ]
 then
+    error "historical TAR does not exist: $TAR_FILE"
+fi
 
-    if [ ! -f "$TAR_FILE" ]
+TAR_TMP_DIR="$TMP_DIR/tar"
+
+mkdir -p "$TAR_TMP_DIR" ||
+    error "cannot create TAR extraction directory"
+
+tar -xzf "$TAR_FILE" -C "$TAR_TMP_DIR" ||
+    error "cannot extract historical TAR: $TAR_FILE"
+
+
+###############################################################################
+# BUILD LIST OF EXISTING FILES
+###############################################################################
+
+declare -A EXISTING_JSON
+declare -A EXISTING_AGG
+
+for FILE in "${JSON_FILES[@]}"
+do
+    RELATIVE="${FILE#$AUDIT_OUTPUT_DIR/}"
+    EXISTING_JSON["$RELATIVE"]=1
+done
+
+for FILE in "${AGG_FILES[@]}"
+do
+    RELATIVE="${FILE#$AUDIT_OUTPUT_DIR/}"
+    EXISTING_AGG["$RELATIVE"]=1
+done
+
+
+###############################################################################
+# RECOVER MISSING JSON FILES
+###############################################################################
+
+while IFS= read -r -d '' FILE
+do
+    RELATIVE="${FILE#$TAR_TMP_DIR/}"
+
+    if [ -z "${EXISTING_JSON[$RELATIVE]}" ]
     then
-        error "no audit JSON files found for date $DATE and historical TAR does not exist: $TAR_FILE"
+        JSON_FILES+=("$FILE")
+        echo "  Recovered JSON: $RELATIVE"
     fi
 
-    echo "Using historical TAR:"
-    echo "  $TAR_FILE"
+done < <(
+    find "$TAR_TMP_DIR" \
+        -type f \
+        -name "access-audit-$DATE.json" \
+        -print0 |
+    sort -z
+)
 
-    TAR_TMP_DIR="$TMP_DIR/json"
 
-    mkdir -p "$TAR_TMP_DIR" ||
-        error "cannot create TAR extraction directory"
+###############################################################################
+# RECOVER MISSING AGG FILES
+###############################################################################
 
-    tar -xzf "$TAR_FILE" -C "$TAR_TMP_DIR" ||
-        error "cannot extract historical TAR: $TAR_FILE"
+while IFS= read -r -d '' FILE
+do
+    RELATIVE="${FILE#$TAR_TMP_DIR/}"
 
-    while IFS= read -r -d '' JSON_FILE
-    do
-        JSON_FILES+=("$JSON_FILE")
+    if [ -z "${EXISTING_AGG[$RELATIVE]}" ]
+    then
+        AGG_FILES+=("$FILE")
+        echo "  Recovered AGG:  $RELATIVE"
+    fi
 
-    done < <(
-        find "$TAR_TMP_DIR" \
-            -type f \
-            -name "access-audit-$DATE.json" \
-            -print0 |
-        sort -z
-    )
+done < <(
+    find "$TAR_TMP_DIR" \
+        -type f \
+        -name "access-audit-$DATE.agg" \
+        -print0 |
+    sort -z
+)
 
+
+mapfile -t JSON_FILES < <(printf '%s\n' "${JSON_FILES[@]}" | sort)
+mapfile -t AGG_FILES < <(printf '%s\n' "${AGG_FILES[@]}" | sort)
+
+
+###############################################################################
+# 3. CHECK INPUT
+###############################################################################
+
+if [ "${#JSON_FILES[@]}" -eq 0 ] ||
+   [ "${#AGG_FILES[@]}" -eq 0 ]
+then
+    error "no complete JSON/AGG set found for date: $DATE"
 fi
 
 
-###############################################################################
-# CHECK INPUT
-###############################################################################
-
-if [ "${#JSON_FILES[@]}" -eq 0 ]
+if [ "${#JSON_FILES[@]}" -ne "${#AGG_FILES[@]}" ]
 then
-    error "no audit JSON files found for date: $DATE"
+    error "JSON/AGG files still incomplete after TAR recovery for date: $DATE (JSON=${#JSON_FILES[@]}, AGG=${#AGG_FILES[@]})"
 fi
 
 
@@ -164,6 +243,16 @@ TMP_OUTPUT=$(mktemp "$MACHINE_OUTPUT_DIR/.${DATE}.XXXXXX.json") ||
 
 
 ###############################################################################
+# BUILD INPUT FILE LIST
+###############################################################################
+
+INPUT_FILES=()
+
+INPUT_FILES+=("${AGG_FILES[@]}")
+INPUT_FILES+=("${JSON_FILES[@]}")
+
+
+###############################################################################
 # BUILD MACHINE JSON
 ###############################################################################
 
@@ -172,32 +261,29 @@ TMP_OUTPUT=$(mktemp "$MACHINE_OUTPUT_DIR/.${DATE}.XXXXXX.json") ||
     -v DATE="$DATE" \
     -v SOURCE="machine-collector" \
     -f "$SCRIPT_DIR/modules/machine-collector.awk" \
-    "${JSON_FILES[@]}" \
+    "${INPUT_FILES[@]}" \
     > "$TMP_OUTPUT"
 
+AWK_STATUS=$?
+
 
 ###############################################################################
-# VALIDATE JSON
+# CHECK AWK RESULT
 ###############################################################################
 
-if command -v jq >/dev/null 2>&1
+if [ "$AWK_STATUS" -ne 0 ]
 then
-
-    if ! jq empty "$TMP_OUTPUT" >/dev/null 2>&1
-    then
-        rm -f "$TMP_OUTPUT"
-        error "generated JSON is invalid"
-    fi
-
+    rm -f "$TMP_OUTPUT"
+    error "machine collector failed"
 fi
 
 
 ###############################################################################
-# INSTALL OUTPUT
+# MOVE OUTPUT INTO PLACE
 ###############################################################################
 
 mv "$TMP_OUTPUT" "$MACHINE_OUTPUT_FILE" ||
-    error "cannot create output file: $MACHINE_OUTPUT_FILE"
+    error "cannot install machine output: $MACHINE_OUTPUT_FILE"
 
 
 ###############################################################################
@@ -211,6 +297,7 @@ echo "======================================================================="
 echo "Machine:          $MACHINE"
 echo "Date:             $DATE"
 echo "JSON files:       ${#JSON_FILES[@]}"
+echo "AGG files:        ${#AGG_FILES[@]}"
+echo "Input files:      ${#INPUT_FILES[@]}"
 echo "Output:           $MACHINE_OUTPUT_FILE"
 echo "======================================================================="
-echo ""
