@@ -10,6 +10,7 @@ PROG=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 MACHINE=$(uname -n)
+MODULES="$SCRIPT_DIR/modules"
 
 AUDIT_OUTPUT_DIR="/tmp/access-audit"
 MACHINE_OUTPUT_DIR="$AUDIT_OUTPUT_DIR/machine"
@@ -260,7 +261,9 @@ INPUT_FILES+=("${JSON_FILES[@]}")
     -v MACHINE="$MACHINE" \
     -v DATE="$DATE" \
     -v SOURCE="machine-collector" \
-    -f "$SCRIPT_DIR/modules/machine-collector.awk" \
+    -f "$MODULES/globals.awk" \
+    -f "$MODULES/utils.awk" \
+    -f "$MODULES/machine-collector.awk" \
     "${INPUT_FILES[@]}" \
     > "$TMP_OUTPUT"
 

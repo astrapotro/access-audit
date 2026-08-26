@@ -501,15 +501,15 @@ function print_ranking(values, hits, n, total,
             print ","
 
         if (percent_total > 0)
-            percent = (hits[value] / percent_total) * 100
+            pct = (hits[value] / percent_total) * 100
         else
-            percent = 0
+            pct = 0
 
         printf "%s{\"value\":\"%s\",\"hits\":%d,\"percent\":%.3f}",
                indent,
                json_escape(value),
                hits[value],
-               percent
+               pct 
     }
 
     print ""
@@ -980,6 +980,72 @@ function print_configuration(config)
 }
 
 ###############################################################################
+# PRINT MACHINE RANKING
+###############################################################################
+
+function print_machine_ranking_report(type, title, total,
+                                      key, value, n, sorted, i, limit)
+{
+    delete ranking_values
+
+    n = 0
+
+    for (key in machine_rank)
+    {
+        if (index(key, type SUBSEP) == 1)
+        {
+            value = substr(key, length(type) + 2)
+            ranking_values[value] = machine_rank[key]
+        }
+    }
+
+    n = asorti(ranking_values, sorted, "@val_num_desc")
+
+    print ""
+    print title
+    print ""
+
+    if (n == 0)
+    {
+        print "No data"
+        return
+    }
+
+    limit = n
+
+    if (limit > TOP)
+        limit = TOP
+
+    printf "%-5s %-12s %-10s %s\n",
+           "#",
+           "Peticiones",
+           "%",
+           "Valor"
+
+    print "-----------------------------------------------------------------------"
+
+    for (i = 1; i <= limit; i++)
+    {
+        value = sorted[i]
+
+        if (total > 0)
+            pct = (ranking_values[value] / total) * 100
+        else
+            pct = 0
+
+        printf "%-5d %-12d %-9.2f %s\n",
+               i,
+               ranking_values[value],
+               pct,
+               value
+    }
+}
+
+
+
+
+
+###############################################################################
 # END
 ###############################################################################
 
@@ -1097,4 +1163,72 @@ END {
     print "  ]"
 
     print "}"
+
+    ###########################################################################
+    # HUMAN READABLE REPORT
+    ###########################################################################
+
+    print_machine_console_report()
+}
+
+###############################################################################
+# PRINT MACHINE REPORT
+###############################################################################
+
+function print_machine_console_report()
+{
+    print "" > "/dev/stderr"
+    print "" > "/dev/stderr"
+    print "=======================================================================" > "/dev/stderr"
+    print "                     Machine access audit" > "/dev/stderr"
+    print "=======================================================================" > "/dev/stderr"
+
+    printf "%-24s : %s\n", "Machine", MACHINE > "/dev/stderr"
+    printf "%-24s : %s\n", "Date", DATE > "/dev/stderr"
+
+    print "" > "/dev/stderr"
+    print "• REQUESTS •" > "/dev/stderr"
+    print "" > "/dev/stderr"
+
+    printf "%-24s : %d\n", "Peticiones", machine_requests > "/dev/stderr"
+    printf "%-24s : %d\n", "Búsquedas", machine_search_requests > "/dev/stderr"
+    printf "%-24s : %s\n", "Bytes enviados", format_bytes(machine_bytes) > "/dev/stderr"
+    printf "%-24s : %d\n", "IPs únicas", machine_unique_ips > "/dev/stderr"
+    printf "%-24s : %d\n", "Hosts", machine_unique_hosts > "/dev/stderr"
+    printf "%-24s : %d\n", "URLs", machine_unique_urls > "/dev/stderr"
+    printf "%-24s : %d\n", "User-Agent", machine_unique_useragents > "/dev/stderr"
+    printf "%-24s : %d\n", "Methods", machine_unique_methods > "/dev/stderr"
+    printf "%-24s : %d\n", "Referers", machine_unique_referers > "/dev/stderr"
+    printf "%-24s : %d\n", "Extensions", machine_unique_extensions > "/dev/stderr"
+    printf "%-24s : %d\n", "Errores HTTP", machine_errors > "/dev/stderr"
+
+    print "" > "/dev/stderr"
+    print "• LATENCY •" > "/dev/stderr"
+    print "" > "/dev/stderr"
+
+    if (machine_requests > 0)
+    {
+        printf "%-24s : %.3f ms\n",
+               "Media",
+               machine_latency_total / machine_requests / 1000 > "/dev/stderr"
+
+        printf "%-24s : %.3f ms\n",
+               "Mínima",
+               machine_latency_min / 1000 > "/dev/stderr"
+
+        printf "%-24s : %.3f ms\n",
+               "Máxima",
+               machine_latency_max / 1000 > "/dev/stderr"
+    }
+
+    print "" > "/dev/stderr"
+    print "• SECURITY •" > "/dev/stderr"
+    print "" > "/dev/stderr"
+
+    printf "%-24s : %d\n", "Bot requests", machine_bot_requests > "/dev/stderr"
+    printf "%-24s : %d\n", "Human requests", machine_human_requests > "/dev/stderr"
+    printf "%-24s : %d\n", "Automatic requests", machine_automatic_requests > "/dev/stderr"
+
+    print "" > "/dev/stderr"
+    print "=======================================================================" > "/dev/stderr"
 }
