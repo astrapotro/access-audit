@@ -52,4 +52,13 @@ END {
         write_aggregate()
         close(AGG_FILE)
     }
+
+
+    print "DEBUG UNIQ_FILE=[" UNIQ_FILE "]" > "/dev/stderr"
+    if (UNIQ_FILE != "")
+    {
+	write_unique()
+        close(UNIQ_FILE)
+    }
+
 }

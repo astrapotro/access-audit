@@ -86,10 +86,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 JSON_FILES=()
 AGG_FILES=()
-
+UNIQ_FILES=()
 
 ###############################################################################
-# 1. JSON + AGG FILES FROM /tmp
+# 1. JSON + AGG + UNIQ FILES FROM /tmp
 ###############################################################################
 
 while IFS= read -r -d '' FILE
@@ -105,6 +105,10 @@ do
             AGG_FILES+=("$FILE")
             ;;
 
+	*.uniq.gz)
+	    UNIQ_FILES+=("$FILE")
+            ;;
+
     esac
 
 done < <(
@@ -116,6 +120,8 @@ done < <(
             -name "access-audit-$DATE.json" \
             -o \
             -name "access-audit-$DATE.agg" \
+            -o \
+            -name "access-audit-$DATE.uniq.gz" \
         \) \
         -not -path "$MACHINE_OUTPUT_DIR/*" \
         -print0 |
@@ -151,6 +157,7 @@ tar -xzf "$TAR_FILE" -C "$TAR_TMP_DIR" ||
 
 declare -A EXISTING_JSON
 declare -A EXISTING_AGG
+declare -A EXISTING_UNIQ
 
 for FILE in "${JSON_FILES[@]}"
 do
@@ -165,71 +172,99 @@ do
 done
 
 
+for FILE in "${UNIQ_FILES[@]}"
+do
+    RELATIVE="${FILE#$AUDIT_OUTPUT_DIR/}"
+    EXISTING_UNIQ["$RELATIVE"]=1
+done
+
+
 ###############################################################################
-# RECOVER MISSING JSON FILES
+# RECOVER MISSING FILES FROM TAR
 ###############################################################################
+
+
+echo "DEBUG TAR_TMP_DIR=[$TAR_TMP_DIR]"
+echo "DEBUG EXISTING UNIQ:"
+for KEY in "${!EXISTING_UNIQ[@]}"
+do
+    echo "  [$KEY]"
+done
+
+echo "DEBUG UNIQ FILES IN TAR:"
+find "$TAR_TMP_DIR" \
+    -type f \
+    -name "access-audit-$DATE.uniq.gz" \
+    -print
+
 
 while IFS= read -r -d '' FILE
 do
     RELATIVE="${FILE#$TAR_TMP_DIR/}"
+    RELATIVE="${RELATIVE#./}"
 
-    if [ -z "${EXISTING_JSON[$RELATIVE]}" ]
-    then
-        JSON_FILES+=("$FILE")
-        echo "  Recovered JSON: $RELATIVE"
-    fi
+	echo "DEBUG TAR FILE=[$FILE]"
+	echo "DEBUG RELATIVE=[$RELATIVE]"
+	echo "DEBUG EXISTING_UNIQ=[$(echo "${EXISTING_UNIQ[$RELATIVE]}")]"
+
+    case "$FILE" in
+
+        *.json)
+            if [ -z "${EXISTING_JSON[$RELATIVE]}" ]
+            then
+                JSON_FILES+=("$FILE")
+                echo "  Recovered JSON: $RELATIVE"
+            fi
+            ;;
+
+        *.agg)
+            if [ -z "${EXISTING_AGG[$RELATIVE]}" ]
+            then
+                AGG_FILES+=("$FILE")
+                echo "  Recovered AGG:  $RELATIVE"
+            fi
+            ;;
+
+        *.uniq.gz)
+            if [ -z "${EXISTING_UNIQ[$RELATIVE]}" ]
+            then
+                UNIQ_FILES+=("$FILE")
+                echo "  Recovered UNIQ: $RELATIVE"
+            fi
+            ;;
+
+    esac
 
 done < <(
     find "$TAR_TMP_DIR" \
         -type f \
-        -name "access-audit-$DATE.json" \
+        \( \
+            -name "access-audit-$DATE.json" \
+            -o \
+            -name "access-audit-$DATE.agg" \
+            -o \
+            -name "access-audit-$DATE.uniq.gz" \
+        \) \
         -print0 |
     sort -z
 )
 
-
-###############################################################################
-# RECOVER MISSING AGG FILES
-###############################################################################
-
-while IFS= read -r -d '' FILE
-do
-    RELATIVE="${FILE#$TAR_TMP_DIR/}"
-
-    if [ -z "${EXISTING_AGG[$RELATIVE]}" ]
-    then
-        AGG_FILES+=("$FILE")
-        echo "  Recovered AGG:  $RELATIVE"
-    fi
-
-done < <(
-    find "$TAR_TMP_DIR" \
-        -type f \
-        -name "access-audit-$DATE.agg" \
-        -print0 |
-    sort -z
-)
 
 
 mapfile -t JSON_FILES < <(printf '%s\n' "${JSON_FILES[@]}" | sort)
 mapfile -t AGG_FILES < <(printf '%s\n' "${AGG_FILES[@]}" | sort)
-
+mapfile -t UNIQ_FILES < <(printf '%s\n' "${UNIQ_FILES[@]}" | sort)
 
 ###############################################################################
 # 3. CHECK INPUT
 ###############################################################################
-
-if [ "${#JSON_FILES[@]}" -eq 0 ] ||
-   [ "${#AGG_FILES[@]}" -eq 0 ]
+if [ "${#JSON_FILES[@]}" -ne "${#AGG_FILES[@]}" ] ||
+   [ "${#JSON_FILES[@]}" -ne "${#UNIQ_FILES[@]}" ]
 then
-    error "no complete JSON/AGG set found for date: $DATE"
+    error "JSON/AGG/UNIQ files still incomplete after TAR recovery for date: $DATE (JSON=${#JSON_FILES[@]}, AGG=${#AGG_FILES[@]}, UNIQ=${#UNIQ_FILES[@]})"
 fi
 
 
-if [ "${#JSON_FILES[@]}" -ne "${#AGG_FILES[@]}" ]
-then
-    error "JSON/AGG files still incomplete after TAR recovery for date: $DATE (JSON=${#JSON_FILES[@]}, AGG=${#AGG_FILES[@]})"
-fi
 
 
 ###############################################################################
@@ -251,6 +286,7 @@ INPUT_FILES=()
 
 INPUT_FILES+=("${AGG_FILES[@]}")
 INPUT_FILES+=("${JSON_FILES[@]}")
+INPUT_FILES+=("${UNIQ_FILES[@]}")
 
 
 ###############################################################################

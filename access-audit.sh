@@ -38,6 +38,7 @@ run_audit()
     local CONFIGURATION="$6"
     local JSON_FILE="$7"
     local AGG_FILE="$8"
+    local UNIQ_FILE="$9"
 
     "$AWK" \
         -v AUDIT_TITLE="$TITLE" \
@@ -47,6 +48,7 @@ run_audit()
         -v AUDIT_CONFIGURATION="$CONFIGURATION" \
         -v JSON_FILE="$JSON_FILE" \
         -v AGG_FILE="$AGG_FILE" \
+        -v UNIQ_FILE="$UNIQ_FILE" \
         -f "$MODULES/globals.awk" \
         -f "$MODULES/utils.awk" \
         -f "$MODULES/parser.awk" \
@@ -57,8 +59,25 @@ run_audit()
         -f "$MODULES/rankings.awk" \
         -f "$MODULES/json.awk" \
 	-f "$MODULES/aggregate.awk" \
+	-f "$MODULES/unique.awk" \
         -f "$SCRIPT_DIR/access-audit.awk" \
         "$LOGFILE"
+
+	AWK_STATUS=$?
+
+	if [ "$AWK_STATUS" -ne 0 ]
+	then
+	    return "$AWK_STATUS"
+	fi
+
+	if [ -f "$UNIQ_FILE" ]
+	then
+	    gzip -f "$UNIQ_FILE"
+	    echo "Unique data: ${UNIQ_FILE}.gz"
+	fi
+
+	return 0
+
 }
 
 
@@ -75,6 +94,7 @@ run_log_audit()
     local AUDIT_FILE
     local LOGDIR
     local JSON_FILE
+    local UNIQ_FILE
 
     # Path para mostrar: aseguramos que empieza por /
     AUDIT_FILE="$LOGFILE"
@@ -118,6 +138,9 @@ run_log_audit()
     JSON_FILE="$LOGDIR/access-audit-$DATE.json"
 
     AGG_FILE="${JSON_FILE%.json}.agg"
+    
+    UNIQ_FILE="${JSON_FILE%.json}.uniq"
+
 
     run_audit \
     	"$LOGFILE" \
@@ -127,7 +150,8 @@ run_log_audit()
 	    "$AUDIT_FILE" \
 	    "$CONFIGURATION" \
 	    "$JSON_FILE" \
-	    "$AGG_FILE"
+	    "$AGG_FILE" \
+            "$UNIQ_FILE"
 }
 
 ###############################################################################
