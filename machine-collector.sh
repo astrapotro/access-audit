@@ -274,7 +274,7 @@ fi
 mkdir -p "$MACHINE_OUTPUT_DIR" ||
     error "cannot create output directory: $MACHINE_OUTPUT_DIR"
 
-TMP_OUTPUT=$(mktemp "$MACHINE_OUTPUT_DIR/.${DATE}.XXXXXX.json") ||
+WTMP_OUTPUT=$(mktemp "$MACHINE_OUTPUT_DIR/.${DATE}.XXXXXX.json") ||
     error "cannot create temporary output file"
 
 
@@ -337,6 +337,7 @@ echo "Machine:          $MACHINE"
 echo "Date:             $DATE"
 echo "JSON files:       ${#JSON_FILES[@]}"
 echo "AGG files:        ${#AGG_FILES[@]}"
+echo "UNIQ files:       ${#UNIQ_FILES[@]}"
 echo "Input files:      ${#INPUT_FILES[@]}"
 echo "Output:           $MACHINE_OUTPUT_FILE"
 echo "======================================================================="

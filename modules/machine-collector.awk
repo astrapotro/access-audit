@@ -422,9 +422,52 @@ function process_json(filename,    info, parts, config, domain, content)
 
 
 ###############################################################################
-# COLLECT RANKING
+# PROCESS UNIQUE
 ###############################################################################
 
+function process_unique(filename,    cmd, line, f, type, value)
+{
+    cmd = "gzip -cd " filename
+
+    while ((cmd | getline line) > 0)
+    {
+        if (line == "")
+            continue
+
+        split(line, f, "|")
+
+        type = f[1]
+        value = f[2]
+
+        if (value == "")
+            continue
+
+        machine_unique[type SUBSEP value] = 1
+    }
+
+    close(cmd)
+}
+
+###############################################################################
+# COUNT UNIQUE
+###############################################################################
+function count_machine_unique(type,    key, prefix, count)
+{
+    prefix = type SUBSEP
+    count = 0
+
+    for (key in machine_unique)
+    {
+        if (index(key, prefix) == 1)
+            count++
+    }
+
+    return count
+}
+
+###############################################################################
+# COLLECT RANKING
+###############################################################################
 function collect_machine_ranking(type, values, hits,
                                   key, value, n)
 {
@@ -971,13 +1014,15 @@ function print_configuration(config)
 ###############################################################################
 # PROCESS INPUT FILES
 ###############################################################################
-
 {
     if (FILENAME ~ /\.agg$/)
         process_aggregate(FILENAME)
     else if (FILENAME ~ /\.json$/)
         process_json(FILENAME)
+    else if (FILENAME ~ /\.uniq\.gz$/)
+        process_unique(FILENAME)
 }
+
 
 ###############################################################################
 # PRINT MACHINE RANKING
@@ -1050,6 +1095,15 @@ function print_machine_ranking_report(type, title, total,
 ###############################################################################
 
 END {
+
+    machine_unique_ips        = count_machine_unique("ip")
+    machine_unique_hosts      = count_machine_unique("host")
+    machine_unique_urls       = count_machine_unique("url")
+    machine_unique_useragents = count_machine_unique("user_agent")
+    machine_unique_methods    = count_machine_unique("method")
+    machine_unique_referers   = count_machine_unique("referer")
+    machine_unique_extensions = count_machine_unique("extension")
+
     ###########################################################################
     # MACHINE JSON
     ###########################################################################
@@ -1117,6 +1171,19 @@ END {
     printf "    \"automatic_requests\":%d\n",
            machine_automatic_requests
 
+    print "  },"
+
+    ###########################################################################
+    # UNIQUEs
+    ###########################################################################
+    print "  \"unique\": {"
+    printf "    \"ips\":%d,\n", machine_unique_ips
+    printf "    \"hosts\":%d,\n", machine_unique_hosts
+    printf "    \"urls\":%d,\n", machine_unique_urls
+    printf "    \"user_agents\":%d,\n", machine_unique_useragents
+    printf "    \"methods\":%d,\n", machine_unique_methods
+    printf "    \"referers\":%d,\n", machine_unique_referers
+    printf "    \"extensions\":%d\n", machine_unique_extensions
     print "  },"
 
     ###########################################################################
