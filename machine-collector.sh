@@ -286,7 +286,6 @@ INPUT_FILES=()
 
 INPUT_FILES+=("${AGG_FILES[@]}")
 INPUT_FILES+=("${JSON_FILES[@]}")
-INPUT_FILES+=("${UNIQ_FILES[@]}")
 
 
 ###############################################################################
@@ -297,6 +296,7 @@ INPUT_FILES+=("${UNIQ_FILES[@]}")
     -v MACHINE="$MACHINE" \
     -v DATE="$DATE" \
     -v SOURCE="machine-collector" \
+    -v UNIQ_FILES="$(printf '%s\n' "${UNIQ_FILES[@]}")" \
     -f "$MODULES/globals.awk" \
     -f "$MODULES/utils.awk" \
     -f "$MODULES/machine-collector.awk" \
