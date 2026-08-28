@@ -274,7 +274,7 @@ fi
 mkdir -p "$MACHINE_OUTPUT_DIR" ||
     error "cannot create output directory: $MACHINE_OUTPUT_DIR"
 
-WTMP_OUTPUT=$(mktemp "$MACHINE_OUTPUT_DIR/.${DATE}.XXXXXX.json") ||
+TMP_OUTPUT=$(mktemp "$MACHINE_OUTPUT_DIR/.${DATE}.XXXXXX.json") ||
     error "cannot create temporary output file"
 
 
