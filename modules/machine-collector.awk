@@ -18,10 +18,33 @@
 ###############################################################################
 # CONFIGURATION
 ###############################################################################
-BEGIN
-{
+
+BEGIN {
     first_config = 1
     first_domain = 1
+
+    ###########################################################################
+    # PROCESS NORMAL INPUT FILES
+    ###########################################################################
+
+    for (i = 1; i < ARGC; i++)
+    {
+        filename = ARGV[i]
+
+        if (filename == "")
+            continue
+
+        if (filename ~ /\.agg$/)
+            process_aggregate(filename)
+        else if (filename ~ /\.json$/)
+            process_json(filename)
+
+        ARGV[i] = ""
+    }
+
+    ###########################################################################
+    # PROCESS UNIQUE FILES
+    ###########################################################################
 
     n_uniq_files = split(UNIQ_FILES, uniq_files, "\n")
 
@@ -31,25 +54,6 @@ BEGIN
             process_unique(uniq_files[i])
     }
 }
-
-
-
-FILENAME ~ /\.agg$/ {
-    process_aggregate(FILENAME)
-    next
-}
-
-FILENAME ~ /\.json$/ {
-    process_json(FILENAME)
-    next
-}
-
-FILENAME ~ /\.uniq\.gz$/ {
-    process_unique(FILENAME)
-    next
-}
-
-
 
 ###############################################################################
 # JSON ESCAPE
