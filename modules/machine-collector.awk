@@ -18,17 +18,28 @@
 ###############################################################################
 # CONFIGURATION
 ###############################################################################
-
-BEGIN {
-    TOP = 50
-
-    machine_requests = 0
-    machine_search_requests = 0
-
+BEGIN
+{
     first_config = 1
     first_domain = 1
-}
 
+    for (i = 1; i < ARGC; i++)
+    {
+        filename = ARGV[i]
+
+        if (filename == "")
+            continue
+
+        if (filename ~ /\.agg$/)
+            process_aggregate(filename)
+        else if (filename ~ /\.json$/)
+            process_json(filename)
+        else if (filename ~ /\.uniq\.gz$/)
+            process_unique(filename)
+    }
+
+    exit
+}
 
 ###############################################################################
 # JSON ESCAPE
@@ -421,9 +432,9 @@ function process_json(filename,    info, parts, config, domain, content)
 }
 
 
-###############################################################################
-# PROCESS UNIQUE
-###############################################################################
+################################################################################
+## PROCESS UNIQUE
+################################################################################
 
 function process_unique(filename,    cmd, line, f, type, value)
 {
@@ -444,9 +455,58 @@ function process_unique(filename,    cmd, line, f, type, value)
 
         machine_unique[type SUBSEP value] = 1
     }
-
+	
     close(cmd)
+        print "DEBUG UNIQUE END" > "/dev/stderr"
 }
+
+
+###############################################################################
+# PROCESS UNIQUE
+###############################################################################
+
+#function process_unique(filename,    cmd, line, f, type, value,
+#                        total, urls, methods, empty)
+#{
+#    cmd = "gzip -cd " filename
+
+#    total = 0
+#    urls = 0
+#    methods = 0
+#    empty = 0
+
+#    while ((cmd | getline line) > 0)
+#    {
+#        total++
+
+#        if (line == "")
+#            continue
+
+#        split(line, f, "|")
+
+#        type = f[1]
+#        value = f[2]
+
+#        if (type == "url")
+#            urls++
+
+#        if (type == "method")
+#            methods++
+
+#        if (value == "")
+#        {
+#            empty++
+#            continue
+#        }
+
+#        machine_unique[type SUBSEP value] = 1
+#    }
+
+#    close(cmd)
+
+#    printf "DEBUG UNIQUE [%s]: total=%d urls=%d methods=%d empty=%d\n",
+#           filename, total, urls, methods, empty > "/dev/stderr"
+#}
 
 ###############################################################################
 # COUNT UNIQUE
@@ -1012,19 +1072,6 @@ function print_configuration(config)
 
 
 ###############################################################################
-# PROCESS INPUT FILES
-###############################################################################
-{
-    if (FILENAME ~ /\.agg$/)
-        process_aggregate(FILENAME)
-    else if (FILENAME ~ /\.json$/)
-        process_json(FILENAME)
-    else if (FILENAME ~ /\.uniq\.gz$/)
-        process_unique(FILENAME)
-}
-
-
-###############################################################################
 # PRINT MACHINE RANKING
 ###############################################################################
 
@@ -1096,6 +1143,8 @@ function print_machine_ranking_report(type, title, total,
 
 END {
 
+print "DEBUG BEFORE UNIQUE COUNTS" > "/dev/stderr"
+
     machine_unique_ips        = count_machine_unique("ip")
     machine_unique_hosts      = count_machine_unique("host")
     machine_unique_urls       = count_machine_unique("url")
@@ -1103,6 +1152,8 @@ END {
     machine_unique_methods    = count_machine_unique("method")
     machine_unique_referers   = count_machine_unique("referer")
     machine_unique_extensions = count_machine_unique("extension")
+
+print "DEBUG AFTER UNIQUE COUNTS" > "/dev/stderr"
 
     ###########################################################################
     # MACHINE JSON
