@@ -18,33 +18,9 @@
 ###############################################################################
 # CONFIGURATION
 ###############################################################################
-
 BEGIN {
     first_config = 1
     first_domain = 1
-
-    ###########################################################################
-    # PROCESS NORMAL INPUT FILES
-    ###########################################################################
-
-    for (i = 1; i < ARGC; i++)
-    {
-        filename = ARGV[i]
-
-        if (filename == "")
-            continue
-
-        if (filename ~ /\.agg$/)
-            process_aggregate(filename)
-        else if (filename ~ /\.json$/)
-            process_json(filename)
-
-        ARGV[i] = ""
-    }
-
-    ###########################################################################
-    # PROCESS UNIQUE FILES
-    ###########################################################################
 
     n_uniq_files = split(UNIQ_FILES, uniq_files, "\n")
 
@@ -53,6 +29,15 @@ BEGIN {
         if (uniq_files[i] != "")
             process_unique(uniq_files[i])
     }
+}
+
+FNR == 1 {
+    if (FILENAME ~ /\.agg$/)
+        process_aggregate(FILENAME)
+    else if (FILENAME ~ /\.json$/)
+        process_json(FILENAME)
+
+    nextfile
 }
 
 ###############################################################################
@@ -471,7 +456,7 @@ function process_unique(filename,    cmd, line, f, type, value)
     }
 	
     close(cmd)
-        print "DEBUG UNIQUE END" > "/dev/stderr"
+    #print "DEBUG UNIQUE END" > "/dev/stderr"
 }
 
 
@@ -1157,7 +1142,7 @@ function print_machine_ranking_report(type, title, total,
 
 END {
 
-print "DEBUG BEFORE UNIQUE COUNTS" > "/dev/stderr"
+#print "DEBUG BEFORE UNIQUE COUNTS" > "/dev/stderr"
 
     machine_unique_ips        = count_machine_unique("ip")
     machine_unique_hosts      = count_machine_unique("host")
@@ -1167,7 +1152,7 @@ print "DEBUG BEFORE UNIQUE COUNTS" > "/dev/stderr"
     machine_unique_referers   = count_machine_unique("referer")
     machine_unique_extensions = count_machine_unique("extension")
 
-print "DEBUG AFTER UNIQUE COUNTS" > "/dev/stderr"
+#print "DEBUG AFTER UNIQUE COUNTS" > "/dev/stderr"
 
     ###########################################################################
     # MACHINE JSON
@@ -1334,6 +1319,18 @@ function print_machine_console_report()
     printf "%-24s : %d\n", "Extensions", machine_unique_extensions > "/dev/stderr"
     printf "%-24s : %d\n", "Errores HTTP", machine_errors > "/dev/stderr"
 
+
+    print "" > "/dev/stderr"
+    print "• SEARCHES •" > "/dev/stderr"
+    print "" > "/dev/stderr"
+
+    printf "%-24s : %d\n", "Búsquedas", machine_search_requests > "/dev/stderr"
+
+    if (machine_requests > 0)
+        printf "%-24s : %.2f %%\n",
+               "% sobre peticiones",
+               (machine_search_requests / machine_requests) * 100 > "/dev/stderr"
+
     print "" > "/dev/stderr"
     print "• LATENCY •" > "/dev/stderr"
     print "" > "/dev/stderr"
@@ -1362,5 +1359,168 @@ function print_machine_console_report()
     printf "%-24s : %d\n", "Automatic requests", machine_automatic_requests > "/dev/stderr"
 
     print "" > "/dev/stderr"
-    print "=======================================================================" > "/dev/stderr"
+
+    print_machine_ranking_console("ip",         "Top IPs",        10)
+    print_machine_ranking_console("host",       "Top Hosts",      10)
+    print_machine_ranking_console("url",        "Top URLs",       10)
+    print_machine_ranking_console("user_agent", "Top User-Agent", 10)
+
+    print_machine_slowest_console(10)
+    
+    if (machine_search_requests > 0)
+        print_machine_ranking_console("search", "Top Searches", 10)
+
+    print_machine_attacks_console()
+}
+
+###############################################################################
+# PRINT MACHINE RANKING REPORT
+###############################################################################
+
+function print_machine_ranking_console(type, title, limit,
+                                       key, value, n, sorted, i, pct)
+{
+    delete ranking_values
+    delete sorted
+
+    n = 0
+
+    for (key in machine_rank)
+    {
+        if (index(key, type SUBSEP) == 1)
+        {
+            value = substr(key, length(type) + 2)
+            ranking_values[value] = machine_rank[key]
+        }
+    }
+
+    n = asorti(ranking_values, sorted, "@val_num_desc")
+
+    if (n == 0)
+        return
+
+    if (limit > n)
+        limit = n
+
+    print "" > "/dev/stderr"
+    print "-----------------------------------------------------------------------" > "/dev/stderr"
+    print title > "/dev/stderr"
+    print "-----------------------------------------------------------------------" > "/dev/stderr"
+
+    printf "%-5s %-12s %-10s %s\n",
+           "#",
+           "Peticiones",
+           "%",
+           "Valor" > "/dev/stderr"
+
+    for (i = 1; i <= limit; i++)
+    {
+        value = sorted[i]
+
+      if (type == "search")
+      {
+          if (machine_search_requests > 0)
+              pct = (ranking_values[value] / machine_search_requests) * 100
+          else
+              pct = 0
+      }
+      else
+      {
+          if (machine_requests > 0)
+              pct = (ranking_values[value] / machine_requests) * 100
+          else
+              pct = 0
+      }
+
+        printf "%-5d %-12d %-9.2f %s\n",
+               i,
+               ranking_values[value],
+               pct,
+               value > "/dev/stderr"
+    }
+}
+
+###############################################################################
+# PRINT MACHINE SLOWEST REQUESTS
+###############################################################################
+
+function print_machine_slowest_console(limit,
+                                       sorted, n, i, key)
+{
+    delete sorted
+    delete slow_values
+
+    for (i = 1; i <= machine_slow_count; i++)
+        slow_values[i] = machine_slow_time[i]
+
+    n = asorti(slow_values, sorted, "@val_num_desc")
+
+    if (n == 0)
+        return
+
+    if (limit > n)
+        limit = n
+
+    print "" > "/dev/stderr"
+    print "-----------------------------------------------------------------------" > "/dev/stderr"
+    print "Slowest Requests" > "/dev/stderr"
+    print "-----------------------------------------------------------------------" > "/dev/stderr"
+
+    printf "%-5s %-12s %-15s %-6s %-7s %s\n",
+           "#",
+           "Time(s)",
+           "IP",
+           "Status",
+           "Method",
+           "URL" > "/dev/stderr"
+
+    for (i = 1; i <= limit; i++)
+    {
+        key = sorted[i]
+
+        printf "%-5d %-12.3f %-15s %-6d %-7s %s\n",
+               i,
+               machine_slow_time[key],
+               machine_slow_ip[key],
+               machine_slow_status[key],
+               machine_slow_method[key],
+               machine_slow_url[key] > "/dev/stderr"
+    }
+}
+
+###############################################################################
+# PRINT MACHINE ATTACKS REPORT
+###############################################################################
+
+function print_machine_attacks_console(attack, n)
+{
+    print "" > "/dev/stderr"
+    print "-----------------------------------------------------------------------" > "/dev/stderr"
+    print "ATTACKS" > "/dev/stderr"
+    print "-----------------------------------------------------------------------" > "/dev/stderr"
+
+    n = 0
+
+    for (attack in machine_attack_hits)
+    {
+        n++
+
+        printf "%-24s : %d\n",
+               attack,
+               machine_attack_hits[attack] > "/dev/stderr"
+
+        printf "  Example  : %s\n",
+               machine_attack_example[attack] > "/dev/stderr"
+
+        printf "  IP       : %s\n",
+               machine_attack_ip[attack] > "/dev/stderr"
+
+        printf "  Timestamp: %s\n",
+               machine_attack_timestamp[attack] > "/dev/stderr"
+
+        print "" > "/dev/stderr"
+    }
+
+    if (n == 0)
+        print "No attacks detected" > "/dev/stderr"
 }

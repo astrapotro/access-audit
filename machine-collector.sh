@@ -184,14 +184,14 @@ done
 ###############################################################################
 
 
-echo "DEBUG TAR_TMP_DIR=[$TAR_TMP_DIR]"
-echo "DEBUG EXISTING UNIQ:"
+#echo "DEBUG TAR_TMP_DIR=[$TAR_TMP_DIR]"
+#echo "DEBUG EXISTING UNIQ:"
 for KEY in "${!EXISTING_UNIQ[@]}"
 do
     echo "  [$KEY]"
 done
 
-echo "DEBUG UNIQ FILES IN TAR:"
+#echo "DEBUG UNIQ FILES IN TAR:"
 find "$TAR_TMP_DIR" \
     -type f \
     -name "access-audit-$DATE.uniq.gz" \
@@ -203,9 +203,9 @@ do
     RELATIVE="${FILE#$TAR_TMP_DIR/}"
     RELATIVE="${RELATIVE#./}"
 
-	echo "DEBUG TAR FILE=[$FILE]"
-	echo "DEBUG RELATIVE=[$RELATIVE]"
-	echo "DEBUG EXISTING_UNIQ=[$(echo "${EXISTING_UNIQ[$RELATIVE]}")]"
+	#echo "DEBUG TAR FILE=[$FILE]"
+	#echo "DEBUG RELATIVE=[$RELATIVE]"
+	#echo "DEBUG EXISTING_UNIQ=[$(echo "${EXISTING_UNIQ[$RELATIVE]}")]"
 
     case "$FILE" in
 
