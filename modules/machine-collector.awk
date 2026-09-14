@@ -460,53 +460,6 @@ function process_unique(filename,    cmd, line, f, type, value)
 
 
 ###############################################################################
-# PROCESS UNIQUE
-###############################################################################
-
-#function process_unique(filename,    cmd, line, f, type, value,
-#                        total, urls, methods, empty)
-#{
-#    cmd = "gzip -cd " filename
-
-#    total = 0
-#    urls = 0
-#    methods = 0
-#    empty = 0
-
-#    while ((cmd | getline line) > 0)
-#    {
-#        total++
-
-#        if (line == "")
-#            continue
-
-#        split(line, f, "|")
-
-#        type = f[1]
-#        value = f[2]
-
-#        if (type == "url")
-#            urls++
-
-#        if (type == "method")
-#            methods++
-
-#        if (value == "")
-#        {
-#            empty++
-#            continue
-#        }
-
-#        machine_unique[type SUBSEP value] = 1
-#    }
-
-#    close(cmd)
-
-#    printf "DEBUG UNIQUE [%s]: total=%d urls=%d methods=%d empty=%d\n",
-#           filename, total, urls, methods, empty > "/dev/stderr"
-#}
-
-###############################################################################
 # COUNT UNIQUE
 ###############################################################################
 function count_machine_unique(type,    key, prefix, count)
