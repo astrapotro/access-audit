@@ -590,8 +590,8 @@ function print_ranking(values, hits, n, total,
 
     limit = n
 
-    if (limit > TOP)
-        limit = TOP
+    if (limit > DEFAULT_TOP)
+        limit = DEFAULT_TOP
 
     print "["
 
@@ -835,8 +835,8 @@ function print_slowest_machine()
 
     limit = machine_slow_count
 
-    if (limit > TOP)
-        limit = TOP
+    if (limit > DEFAULT_TOP)
+        limit = DEFAULT_TOP
 
     for (i = 1; i <= limit; i++)
     {
@@ -885,8 +885,8 @@ function print_config_slowest(config,    prefix, i, n, count, order, limit)
 
     limit = count
 
-    if (limit > TOP)
-        limit = TOP
+    if (limit > DEFAULT_TOP)
+        limit = DEFAULT_TOP
 
     for (i = 1; i <= limit; i++)
     {
@@ -1104,8 +1104,8 @@ function print_machine_ranking_report(type, title, total,
 
     limit = n
 
-    if (limit > TOP)
-        limit = TOP
+    if (limit > DEFAULT_TOP)
+        limit = DEFAULT_TOP
 
     printf "%-5s %-12s %-10s %s\n",
            "#",
