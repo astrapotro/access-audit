@@ -250,7 +250,6 @@ function process_aggregate(filename,    line, f, n, type, config, value, hits)
             if (f[2] == "requests")
             {
                 machine_requests += value
-                machine_total_requests += value
                 config_requests[config] += value
             }
             else if (f[2] == "errors")
@@ -626,7 +625,7 @@ function print_ranking(values, hits, n, total,
 function print_machine_rankings()
 {
     print "  \"rankings\": {"
-    print "    \"limit\":50,"
+    print "    \"limit\":" DEFAULT_TOP ","
 
     n = collect_machine_ranking("ip", values, hits)
     printf "    \"ips\":"
@@ -694,7 +693,7 @@ function print_machine_rankings()
 function print_config_rankings(config)
 {
     print "    \"rankings\": {"
-    print "      \"limit\":50,"
+    print "    \"limit\":" DEFAULT_TOP ","
 
     n = collect_config_ranking(config, "ip", values, hits)
     printf "      \"ips\":"
