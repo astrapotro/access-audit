@@ -285,8 +285,10 @@ TMP_OUTPUT=$(mktemp "$MACHINE_OUTPUT_DIR/.${DATE}.XXXXXX.json") ||
     error "cannot create temporary output file"
 TMP_UNIQ="$TMP_DIR/$DATE.uniq"
 TMP_UNIQ_GZ="$TMP_DIR/$DATE.uniq.gz"
-TMP_NAS_OUTPUT="$TMP_DIR/$DATE.json"
-TMP_NAS_UNIQ="$TMP_DIR/$DATE.uniq.gz"
+TMP_NAS_OUTPUT=$(mktemp "$NAS_MACHINE_OUTPUT_DIR/.$DATE.XXXXXX.json") ||
+    error "cannot create temporary NAS JSON"
+TMP_NAS_UNIQ=$(mktemp "$NAS_MACHINE_OUTPUT_DIR/.$DATE.XXXXXX.uniq.gz") ||
+    error "cannot create temporary NAS UNIQ"
 
 
 mkdir -p "$NAS_MACHINE_OUTPUT_DIR" ||
@@ -349,6 +351,12 @@ rm -f "$TMP_UNIQ"
 ###############################################################################
 # MOVE OUTPUT INTO PLACE
 ###############################################################################
+cp "$MACHINE_OUTPUT_FILE" "$TMP_NAS_OUTPUT" ||
+    error "cannot copy machine output to NAS"
+
+mv "$TMP_NAS_OUTPUT" "$NAS_MACHINE_OUTPUT_FILE" ||
+    error "cannot install NAS machine output: $NAS_MACHINE_OUTPUT_FILE"
+
 
 mv "$TMP_OUTPUT" "$MACHINE_OUTPUT_FILE" ||
     error "cannot install machine output: $MACHINE_OUTPUT_FILE"
