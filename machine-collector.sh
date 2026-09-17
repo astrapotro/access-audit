@@ -328,7 +328,7 @@ AWK_STATUS=$?
 
 if [ "$AWK_STATUS" -ne 0 ]
 then
-    rm -f "$TMP_OUTPUT" "TMP_UNIQ"
+    rm -f "$TMP_OUTPUT" "$TMP_UNIQ"
     error "machine collector failed"
 fi
 
