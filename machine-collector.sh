@@ -193,16 +193,16 @@ done
 
 #echo "DEBUG TAR_TMP_DIR=[$TAR_TMP_DIR]"
 #echo "DEBUG EXISTING UNIQ:"
-for KEY in "${!EXISTING_UNIQ[@]}"
-do
-    echo "  [$KEY]"
-done
+#for KEY in "${!EXISTING_UNIQ[@]}"
+#do
+#    echo "  [$KEY]"
+#done
 
 #echo "DEBUG UNIQ FILES IN TAR:"
-find "$TAR_TMP_DIR" \
-    -type f \
-    -name "access-audit-$DATE.uniq.gz" \
-    -print
+#find "$TAR_TMP_DIR" \
+#    -type f \
+#    -name "access-audit-$DATE.uniq.gz" \
+#    -print
 
 
 while IFS= read -r -d '' FILE
@@ -283,6 +283,11 @@ mkdir -p "$MACHINE_OUTPUT_DIR" ||
 
 TMP_OUTPUT=$(mktemp "$MACHINE_OUTPUT_DIR/.${DATE}.XXXXXX.json") ||
     error "cannot create temporary output file"
+TMP_UNIQ="$TMP_DIR/$DATE.uniq"
+TMP_UNIQ_GZ="$TMP_DIR/$DATE.uniq.gz"
+TMP_NAS_OUTPUT="$TMP_DIR/$DATE.json"
+TMP_NAS_UNIQ="$TMP_DIR/$DATE.uniq.gz"
+
 
 mkdir -p "$NAS_MACHINE_OUTPUT_DIR" ||
     error "cannot create output directory: $NAS_MACHINE_OUTPUT_DIR"
@@ -323,9 +328,22 @@ AWK_STATUS=$?
 
 if [ "$AWK_STATUS" -ne 0 ]
 then
-    rm -f "$TMP_OUTPUT"
+    rm -f "$TMP_OUTPUT" "TMP_UNIQ"
     error "machine collector failed"
 fi
+
+
+###############################################################################
+# COMPRESS MACHINE UNIQUE
+###############################################################################
+
+if ! gzip -c "$TMP_UNIQ" > "$TMP_UNIQ_GZ"
+then
+    rm -f "$TMP_OUTPUT" "$TMP_UNIQ" "$TMP_UNIQ_GZ"
+    error "cannot create machine unique output"
+fi
+
+rm -f "$TMP_UNIQ"
 
 
 ###############################################################################
@@ -334,6 +352,36 @@ fi
 
 mv "$TMP_OUTPUT" "$MACHINE_OUTPUT_FILE" ||
     error "cannot install machine output: $MACHINE_OUTPUT_FILE"
+
+mv "$TMP_UNIQ_GZ" "$MACHINE_UNIQ_FILE" ||
+    error "cannot install machine unique output: $MACHINE_UNIQ_FILE"
+
+
+
+###############################################################################
+# PUBLISH TO NAS
+###############################################################################
+
+if ! cp "$MACHINE_OUTPUT_FILE" "$TMP_NAS_OUTPUT"
+then
+    error "cannot copy machine output to NAS"
+fi
+
+if ! mv "$TMP_NAS_OUTPUT" "$NAS_MACHINE_OUTPUT_FILE"
+then
+    error "cannot install NAS machine output: $NAS_MACHINE_OUTPUT_FILE"
+fi
+
+if ! cp "$MACHINE_UNIQ_FILE" "$TMP_NAS_UNIQ"
+then
+    error "cannot copy machine unique output to NAS"
+fi
+
+if ! mv "$TMP_NAS_UNIQ" "$NAS_MACHINE_UNIQ_FILE"
+then
+    error "cannot install NAS machine unique output: $NAS_MACHINE_UNIQ_FILE"
+fi
+
 
 
 ###############################################################################
@@ -350,5 +398,8 @@ echo "JSON files:       ${#JSON_FILES[@]}"
 echo "AGG files:        ${#AGG_FILES[@]}"
 echo "UNIQ files:       ${#UNIQ_FILES[@]}"
 echo "Input files:      ${#INPUT_FILES[@]}"
-echo "Output:           $MACHINE_OUTPUT_FILE"
+echo "Machine JSON:      $MACHINE_OUTPUT_FILE"
+echo "Machine UNIQ:      $MACHINE_UNIQ_FILE"
+echo "NAS JSON:          $NAS_MACHINE_OUTPUT_FILE"
+echo "NAS UNIQ:          $NAS_MACHINE_UNIQ_FILE"
 echo "======================================================================="
