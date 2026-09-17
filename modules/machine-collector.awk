@@ -1,4 +1,5 @@
 ###############################################################################
+
 #
 # Access Audit - Machine Collector
 #
@@ -1106,6 +1107,9 @@ END {
 
 #print "DEBUG AFTER UNIQUE COUNTS" > "/dev/stderr"
 
+    if (MACHINE_UNIQ_FILE != "")
+    	write_machine_unique(MACHINE_UNIQ_FILE)
+
     ###########################################################################
     # MACHINE JSON
     ###########################################################################
@@ -1475,4 +1479,26 @@ function print_machine_attacks_console(attack, n)
 
     if (n == 0)
         print "No attacks detected" > "/dev/stderr"
+}
+
+
+###############################################################################
+# WRITE MACHINE UNIQ
+###############################################################################
+function write_machine_unique(filename,    key, parts, type, value)
+{
+    for (key in machine_unique)
+    {
+        split(key, parts, SUBSEP)
+
+        type = parts[1]
+        value = parts[2]
+
+        if (type == "" || value == "")
+            continue
+
+        printf "%s|%s\n", type, value > filename
+    }
+
+    close(filename)
 }

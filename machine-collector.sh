@@ -10,12 +10,6 @@ PROG=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 MACHINE=$(uname -n)
-MODULES="$SCRIPT_DIR/modules"
-
-AUDIT_OUTPUT_DIR="/tmp/access-audit"
-MACHINE_OUTPUT_DIR="$AUDIT_OUTPUT_DIR/$MACHINE"
-
-BACKUP_LOG_BASE="/web/log/apache2"
 
 AWK=$(command -v gawk)
 
@@ -64,8 +58,21 @@ fi
 ###############################################################################
 # PATHS
 ###############################################################################
+MODULES="$SCRIPT_DIR/modules"
+
+AUDIT_OUTPUT_DIR="/tmp/access-audit"
+MACHINE_OUTPUT_DIR="$AUDIT_OUTPUT_DIR/$MACHINE"
+
+NAS_ACCESS_AUDIT_DIR="/tmp/access-audit-nas"
+NAS_MACHINE_OUTPUT_DIR="$NAS_ACCESS_AUDIT_DIR/machines/$MACHINE"
+
+BACKUP_LOG_BASE="/web/log/apache2"
 
 MACHINE_OUTPUT_FILE="$MACHINE_OUTPUT_DIR/$DATE.json"
+MACHINE_UNIQ_FILE="$MACHINE_OUTPUT_DIR/$DATE.uniq.gz"
+
+NAS_MACHINE_OUTPUT_FILE="$NAS_MACHINE_OUTPUT_DIR/$DATE.json"
+NAS_MACHINE_UNIQ_FILE="$NAS_MACHINE_OUTPUT_DIR/$DATE.uniq.gz"
 
 TAR_FILE="$BACKUP_LOG_BASE/$MACHINE/${DATE:0:4}/${DATE:5:2}/access-audit-$DATE.tar.gz"
 
@@ -277,6 +284,9 @@ mkdir -p "$MACHINE_OUTPUT_DIR" ||
 TMP_OUTPUT=$(mktemp "$MACHINE_OUTPUT_DIR/.${DATE}.XXXXXX.json") ||
     error "cannot create temporary output file"
 
+mkdir -p "$NAS_MACHINE_OUTPUT_DIR" ||
+    error "cannot create output directory: $NAS_MACHINE_OUTPUT_DIR"
+
 
 ###############################################################################
 # BUILD INPUT FILE LIST
@@ -296,6 +306,7 @@ INPUT_FILES+=("${JSON_FILES[@]}")
     -v MACHINE="$MACHINE" \
     -v DATE="$DATE" \
     -v SOURCE="machine-collector" \
+    -v MACHINE_UNIQ_FILE="$TMP_UNIQ" \
     -v UNIQ_FILES="$(printf '%s\n' "${UNIQ_FILES[@]}")" \
     -f "$MODULES/globals.awk" \
     -f "$MODULES/utils.awk" \
