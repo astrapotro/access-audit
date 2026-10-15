@@ -13,7 +13,6 @@ BEGIN {
 
     machine_count = 0
 
-    n_uniq = split(MACHINE_UNIQ_FILES, uniq_files, "\n")
 
 ##print "DEBUG: BEGIN" > "/dev/stderr"
 
@@ -45,11 +44,9 @@ n_uniq = split(MACHINE_UNIQ_FILES, uniq_files, "\n")
         }
     }
 
-    if (machine_count != EXPECTED_MACHINES)
-    {
-##        print "ERROR: expected " EXPECTED_MACHINES \
+    if (machine_count != EXPECTED_MACHINES) {
+        print "ERROR: expected " EXPECTED_MACHINES \
               " machines, processed " machine_count > "/dev/stderr"
-
         exit 1
     }
 }
@@ -603,17 +600,6 @@ function print_attacks(    sorted, n, i, indicator)
 
 END {
 
-    ###########################################################################
-    # UNIQUE COUNTS
-    ###########################################################################
-##    print "DEBUG: before ip" > "/dev/stderr"
-    global_unique_ips = count_unique("ip")
-##    print "DEBUG: after ip = " global_unique_ips > "/dev/stderr"
-
-##    print "DEBUG: before host" > "/dev/stderr"
-    global_unique_hosts = count_unique("host")
-##    print "DEBUG: after host = " global_unique_hosts > "/dev/stderr"
-   
     ###########################################################################
     # UNIQUE COUNTS
     ###########################################################################
