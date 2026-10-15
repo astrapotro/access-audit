@@ -218,7 +218,7 @@ function process_aggregate(filename,    line, f, n, type, config, value, hits)
         if (line == "")
             continue
 
-        n = split(line, f, "|")
+        n = split(line, f, "[|]")
 
         type = f[1]
 
