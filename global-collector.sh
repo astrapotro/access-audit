@@ -69,7 +69,7 @@ GLOBAL_OUTPUT_FILE="$GLOBAL_OUTPUT_DIR/$DATE.json"
 #
 #   EXPECTED_MACHINES=1 ./global-collector.sh 2026-08-19
 #
-EXPECTED_MACHINES="${EXPECTED_MACHINES:-12}"
+EXPECTED_MACHINES="${EXPECTED_MACHINES:-3}"
 
 ###############################################################################
 # VALIDATE MACHINE DIRECTORY
