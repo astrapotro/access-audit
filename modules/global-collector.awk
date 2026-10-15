@@ -15,39 +15,39 @@ BEGIN {
 
     n_uniq = split(MACHINE_UNIQ_FILES, uniq_files, "\n")
 
-print "DEBUG: BEGIN" > "/dev/stderr"
+##print "DEBUG: BEGIN" > "/dev/stderr"
 
 n_json = split(MACHINE_JSON_FILES, json_files, "\n")
-print "DEBUG: JSON files: " n_json > "/dev/stderr"
+##print "DEBUG: JSON files: " n_json > "/dev/stderr"
 
 n_uniq = split(MACHINE_UNIQ_FILES, uniq_files, "\n")
-print "DEBUG: UNIQ files: " n_uniq > "/dev/stderr"
+##print "DEBUG: UNIQ files: " n_uniq > "/dev/stderr"
 
 
     for (i = 1; i <= n_uniq; i++)
     {
-    print "DEBUG: before unique " uniq_files[i] > "/dev/stderr"
+##    print "DEBUG: before unique " uniq_files[i] > "/dev/stderr"
         if (uniq_files[i] != "")
             process_unique(uniq_files[i])
-    print "DEBUG: after unique " uniq_files[i] > "/dev/stderr"
+##    print "DEBUG: after unique " uniq_files[i] > "/dev/stderr"
     }
 
-print "DEBUG: unique processing finished" > "/dev/stderr"
+##print "DEBUG: unique processing finished" > "/dev/stderr"
     
     for (i = 1; i <= n_json; i++)
     {
         if (json_files[i] != "")
         {
             machine_count++
-    		print "DEBUG: before JSON " json_files[i] > "/dev/stderr"
+##            print "DEBUG: before JSON " json_files[i] > "/dev/stderr"
             process_machine_json(json_files[i])
-	    print "DEBUG: after JSON " json_files[i] > "/dev/stderr"
+##	    print "DEBUG: after JSON " json_files[i] > "/dev/stderr"
         }
     }
 
     if (machine_count != EXPECTED_MACHINES)
     {
-        print "ERROR: expected " EXPECTED_MACHINES \
+##        print "ERROR: expected " EXPECTED_MACHINES \
               " machines, processed " machine_count > "/dev/stderr"
 
         exit 1
@@ -175,7 +175,7 @@ function process_unique(filename,    cmd, line, f, type, value)
         if (line == "")
             continue
 
-        split(line, f, "|")
+	split(line, f, "[|]")
 
         type = f[1]
         value = f[2]
@@ -606,47 +606,51 @@ END {
     ###########################################################################
     # UNIQUE COUNTS
     ###########################################################################
- print "DEBUG: before ip" > "/dev/stderr"
+##    print "DEBUG: before ip" > "/dev/stderr"
     global_unique_ips = count_unique("ip")
-    print "DEBUG: after ip = " global_unique_ips > "/dev/stderr"
+##    print "DEBUG: after ip = " global_unique_ips > "/dev/stderr"
 
-    print "DEBUG: before host" > "/dev/stderr"
+##    print "DEBUG: before host" > "/dev/stderr"
     global_unique_hosts = count_unique("host")
-    print "DEBUG: after host = " global_unique_hosts > "/dev/stderr"
-    
-    #global_unique_ips        = count_unique("ip")
-    #global_unique_hosts      = count_unique("host")
-    #global_unique_urls       = count_unique("url")
-    #global_unique_useragents = count_unique("user_agent")
-    #global_unique_methods    = count_unique("method")
-    #global_unique_referers   = count_unique("referer")
-    #global_unique_extensions = count_unique("extension")
+##    print "DEBUG: after host = " global_unique_hosts > "/dev/stderr"
+   
+    ###########################################################################
+    # UNIQUE COUNTS
+    ###########################################################################
 
-    print "DEBUG: after unique counts" > "/dev/stderr"
+    global_unique_ips        = count_unique("ip")
+    global_unique_hosts      = count_unique("host")
+    global_unique_urls       = count_unique("url")
+    global_unique_useragents = count_unique("user_agent")
+    global_unique_methods    = count_unique("method")
+    global_unique_referers   = count_unique("referer")
+    global_unique_extensions = count_unique("extension")
+ 
+##    print "DEBUG: after unique counts" > "/dev/stderr"
 
-    print "DEBUG: before rankings" > "/dev/stderr"
+##    print "DEBUG: before rankings" > "/dev/stderr"
 
     # aquí está el código actual de rankings
 
-    print "DEBUG: after rankings" > "/dev/stderr"
+##    print "DEBUG: after rankings" > "/dev/stderr"
 
-    print "DEBUG: before slowest" > "/dev/stderr"
+##    print "DEBUG: before slowest" > "/dev/stderr"
 
     # aquí está el código actual de slowest_requests
 
-    print "DEBUG: after slowest" > "/dev/stderr"
+##    print "DEBUG: after slowest" > "/dev/stderr"
 
-    print "DEBUG: before attacks" > "/dev/stderr"
+##    print "DEBUG: before attacks" > "/dev/stderr"
 
     # aquí está el código actual de attacks
 
-    print "DEBUG: after attacks" > "/dev/stderr"
+##    print "DEBUG: after attacks" > "/dev/stderr"
 
-    print "DEBUG: before JSON output" > "/dev/stderr"
+##    print "DEBUG: before JSON output" > "/dev/stderr"
 
     # aquí está el resto de impresión del JSON
 
-    print "DEBUG: after JSON output" > "/dev/stderr"
+##    print "DEBUG: after JSON output" > "/dev/stderr"
 
 
     ###########################################################################
