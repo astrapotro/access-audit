@@ -157,6 +157,7 @@ UNIQ_FILES=$(printf '%s\n' "${MACHINE_UNIQ_FILES[@]}")
     -v MACHINE_JSON_FILES="$JSON_FILES" \
     -v MACHINE_UNIQ_FILES="$UNIQ_FILES" \
     -f "$MODULES/global-collector.awk" \
+    < /dev/null \
     > "$TMP_OUTPUT"
 
 AWK_STATUS=$?
