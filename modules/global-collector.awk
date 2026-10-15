@@ -249,7 +249,7 @@ function process_machine_json(filename,    line, section, value, hits, type)
         # LATENCY
         #######################################################################
 
-        if (line ~ /^ "latency": *\{/)
+        if (line ~ /^  "latency": *\{/)
         {
             section = "latency"
             continue
@@ -286,7 +286,7 @@ function process_machine_json(filename,    line, section, value, hits, type)
         # SECURITY
         #######################################################################
 
-        if (line ~ /^ "security": *\{/)
+        if (line ~ /^  "security": *\{/)
         {
             section = "security"
             continue
